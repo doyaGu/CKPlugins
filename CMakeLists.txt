@@ -64,6 +64,7 @@ endif ()
 
 find_package(VirtoolsSDK REQUIRED HINTS "${VIRTOOLS_SDK_PATH}")
 
+option(BUILD_AVIREADER "Build AviReader plugin" ON)
 option(BUILD_IMAGEREADER "Build ImageReader plugin" ON)
 option(BUILD_WAVREADER "Build WavReader plugin" ON)
 option(BUILD_VIRTOOLSLOADER "Build VirtoolsLoader plugin" ON)
@@ -71,6 +72,10 @@ option(BUILD_TESTS "Build unit tests" ON)
 
 if (BUILD_TESTS)
     include(CTest)
+endif ()
+
+if (BUILD_AVIREADER)
+    add_subdirectory(AviReader)
 endif ()
 
 if (BUILD_IMAGEREADER)
