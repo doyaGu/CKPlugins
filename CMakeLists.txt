@@ -2,32 +2,43 @@ cmake_minimum_required(VERSION 3.14)
 
 project(CKPlugins VERSION 2.1.0.14 LANGUAGES CXX)
 
+# Determine if CKPlugins is built as a subproject (using add_subdirectory) or if it is the master project
+if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(CKPLUGINS_STANDALONE TRUE)
+else ()
+    set(CKPLUGINS_STANDALONE FALSE)
+endif ()
+
 # Use folders to organize targets in an IDE
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMakeTargets")
+if (CKPLUGINS_STANDALONE)
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+    set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMakeTargets")
+endif ()
 
 if (NOT WIN32)
     message(FATAL_ERROR "Only support Windows.")
 endif ()
 
 # Use relative paths
-if (WIN32)
+if (WIN32 AND CKPLUGINS_STANDALONE)
     set(CMAKE_USE_RELATIVE_PATHS TRUE)
     set(CMAKE_SUPPRESS_REGENERATION TRUE)
 endif ()
 
-if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(STATUS "Setting build type to 'Release' as no build type was specified")
-    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the build type (Debug/Release)" FORCE)
-endif ()
+if (CKPLUGINS_STANDALONE)
+    if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+        message(STATUS "Setting build type to 'Release' as no build type was specified")
+        set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the build type (Debug/Release)" FORCE)
+    endif ()
 
-if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "The root directory of the installation" FORCE)
-    message(STATUS "Setting default install directory to ${CMAKE_INSTALL_PREFIX} as no install directory was specified")
-endif ()
+    if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+        set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "The root directory of the installation" FORCE)
+        message(STATUS "Setting default install directory to ${CMAKE_INSTALL_PREFIX} as no install directory was specified")
+    endif ()
 
-# Generate a CompilationDatabase (compile_commands.json)
-set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
+    # Generate a CompilationDatabase (compile_commands.json)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
+endif ()
 
 set(VIRTOOLS_SDK_PATH "" CACHE PATH "Path to the Virtools SDK")
 option(VIRTOOLS_SDK_FETCH_FROM_GIT "Set to ON to fetch copy of SDK from git if not otherwise locatable" OFF)
@@ -70,7 +81,7 @@ option(BUILD_WAVREADER "Build WavReader plugin" ON)
 option(BUILD_VIRTOOLSLOADER "Build VirtoolsLoader plugin" ON)
 option(BUILD_TESTS "Build unit tests" ON)
 
-if (BUILD_TESTS)
+if (BUILD_TESTS AND CKPLUGINS_STANDALONE)
     include(CTest)
 endif ()
 
