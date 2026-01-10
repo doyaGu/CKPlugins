@@ -5,4 +5,4 @@ target_compile_definitions(AVIReader PRIVATE
     $<$<C_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
     $<$<C_COMPILER_ID:MSVC>:_CRT_NONSTDC_NO_WARNINGS>
 )
-target_link_libraries(AVIReader PRIVATE CK2 VxMath)
+target_link_libraries(AVIReader PRIVATE CK2 VxMath Vfw32)
