@@ -101,7 +101,7 @@ PLUGIN_EXPORT CKPluginInfo *CKGetPluginInfo(int index)
 
 CKPluginInfo *CKNemoLoader::GetReaderInfo()
 {
-    return (CKPluginInfo *)g_PluginInfo;
+    return &g_PluginInfo[0];
 }
 
 CKERROR CheckFileType(CKSTRING FileName)
@@ -110,12 +110,13 @@ CKERROR CheckFileType(CKSTRING FileName)
     if (!fp)
         return CKERR_INVALIDFILE;
 
-    char buffer[8];
-    fread(buffer, sizeof(char), 4, fp);
-    if (strncmp(buffer, "Nemo", 4) != 0)
+    unsigned char buffer[4];
+    size_t bytesRead = fread(buffer, sizeof(unsigned char), 4, fp);
+    fclose(fp);
+
+    if (bytesRead != 4 || memcmp(buffer, "Nemo", 4) != 0)
         return CKERR_INVALIDFILE;
 
-    fclose(fp);
     return CK_OK;
 }
 
