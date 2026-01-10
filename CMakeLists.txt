@@ -81,22 +81,99 @@ option(BUILD_WAVREADER "Build WavReader plugin" ON)
 option(BUILD_VIRTOOLSLOADER "Build VirtoolsLoader plugin" ON)
 option(BUILD_TESTS "Build unit tests" ON)
 
+# Track built components for package configuration
+set(CKPLUGINS_COMPONENTS "")
+
 if (BUILD_TESTS AND CKPLUGINS_STANDALONE)
     include(CTest)
 endif ()
 
 if (BUILD_AVIREADER)
     add_subdirectory(AviReader)
+    list(APPEND CKPLUGINS_COMPONENTS "AVIReader")
 endif ()
 
 if (BUILD_IMAGEREADER)
     add_subdirectory(ImageReader)
+    list(APPEND CKPLUGINS_COMPONENTS "ImageReader")
 endif ()
 
 if (BUILD_WAVREADER)
     add_subdirectory(WavReader)
+    list(APPEND CKPLUGINS_COMPONENTS "WavReader")
 endif ()
 
 if (BUILD_VIRTOOLSLOADER)
     add_subdirectory(VirtoolsLoader)
+    list(APPEND CKPLUGINS_COMPONENTS "VirtoolsLoader")
+endif ()
+
+# =============================================================================
+# Installation
+# =============================================================================
+
+if (CKPLUGINS_STANDALONE)
+    include(CMakePackageConfigHelpers)
+    include(GNUInstallDirs)
+
+    # Install export targets
+    install(EXPORT CKPluginsTargets
+        FILE CKPluginsTargets.cmake
+        NAMESPACE CKPlugins::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CKPlugins
+    )
+
+    # Generate package version file
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/CKPluginsConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+
+    # Create package configuration file
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CKPluginsConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/CKPluginsConfig.cmake"
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CKPlugins
+    )
+
+    # Install package configuration files
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/CKPluginsConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/CKPluginsConfigVersion.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CKPlugins
+    )
+
+    # Install project files
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        "${CMAKE_CURRENT_SOURCE_DIR}/INSTALL.md"
+        DESTINATION ${CMAKE_INSTALL_DOCDIR}
+    )
+
+    # =============================================================================
+    # Packaging with CPack
+    # =============================================================================
+    
+    set(CPACK_PACKAGE_NAME "CKPlugins")
+    set(CPACK_PACKAGE_VENDOR "Virtools Community")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Virtools Plugin Collection - AVI, Image, WAV readers and Virtools loader")
+    set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+    set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+    set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+    set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "CKPlugins")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+    set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+    
+    # Archive settings (ZIP for Windows)
+    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+    
+    # Set package file name
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-win64")
+    
+    include(CPack)
+    
 endif ()

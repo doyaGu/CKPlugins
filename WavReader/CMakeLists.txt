@@ -9,3 +9,26 @@ target_compile_definitions(WavReader PRIVATE
     $<$<C_COMPILER_ID:MSVC>:_CRT_NONSTDC_NO_WARNINGS>
 )
 target_link_libraries(WavReader PRIVATE CK2 VxMath)
+
+# Set output directory for the plugin
+set_target_properties(WavReader PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
+
+# Installation
+include(GNUInstallDirs)
+
+install(TARGETS WavReader
+    EXPORT CKPluginsTargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES
+    WavReader.h
+    dr_wav.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/CKPlugins/WavReader
+)

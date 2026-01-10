@@ -19,6 +19,31 @@ target_compile_definitions(ImageReader PRIVATE
 )
 target_link_libraries(ImageReader PRIVATE CK2 VxMath)
 
+# Set output directory for the plugin
+set_target_properties(ImageReader PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
+
+# Installation
+include(GNUInstallDirs)
+
+install(TARGETS ImageReader
+    EXPORT CKPluginsTargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES
+    ImageReader.h
+    BmpReader.h
+    TgaReader.h
+    PcxReader.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/CKPlugins/ImageReader
+)
+
 # =============================================================================
 # Testing
 # =============================================================================

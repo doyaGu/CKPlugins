@@ -1,0 +1,24 @@
+@PACKAGE_INIT@
+
+# CKPlugins package configuration file
+# This file helps other CMake projects find and use CKPlugins
+
+include(CMakeFindDependencyMacro)
+
+# Find Virtools SDK dependency
+set(VIRTOOLS_SDK_PATH "@VIRTOOLS_SDK_PATH@" CACHE PATH "Path to the Virtools SDK")
+find_dependency(VirtoolsSDK HINTS "${VIRTOOLS_SDK_PATH}")
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/CKPluginsTargets.cmake")
+
+# Set variables for compatibility
+set(CKPlugins_VERSION @PROJECT_VERSION@)
+set(CKPlugins_VERSION_MAJOR @PROJECT_VERSION_MAJOR@)
+set(CKPlugins_VERSION_MINOR @PROJECT_VERSION_MINOR@)
+set(CKPlugins_VERSION_PATCH @PROJECT_VERSION_PATCH@)
+
+# Provide list of available components/targets
+set(CKPlugins_COMPONENTS @CKPLUGINS_COMPONENTS@)
+
+check_required_components(CKPlugins)

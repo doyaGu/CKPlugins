@@ -6,3 +6,24 @@ target_compile_definitions(AVIReader PRIVATE
     $<$<C_COMPILER_ID:MSVC>:_CRT_NONSTDC_NO_WARNINGS>
 )
 target_link_libraries(AVIReader PRIVATE CK2 VxMath Vfw32)
+
+# Set output directory for the plugin
+set_target_properties(AVIReader PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
+
+# Installation
+include(GNUInstallDirs)
+
+install(TARGETS AVIReader
+    EXPORT CKPluginsTargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES AVIReader.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/CKPlugins/AVIReader
+)
