@@ -40,14 +40,9 @@ endif ()
 # =============================================================================
 # C++ standard
 # =============================================================================
-if (NOT CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 98)
-endif ()
-if (NOT DEFINED CMAKE_CXX_STANDARD_REQUIRED)
-    set(CMAKE_CXX_STANDARD_REQUIRED NO)
-endif ()
-if (NOT DEFINED CMAKE_CXX_EXTENSIONS)
-    set(CMAKE_CXX_EXTENSIONS YES)
+if (CKPLUGINS_IS_TOP_LEVEL)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED YES)
 endif ()
 
 # =============================================================================
@@ -127,12 +122,12 @@ if (NOT TARGET VxMath OR NOT TARGET CK2)
                 get_filename_component(FETCHCONTENT_BASE_DIR "${VIRTOOLS_SDK_FETCH_FROM_GIT_PATH}" REALPATH BASE_DIR "${CMAKE_SOURCE_DIR}")
             endif ()
             FetchContent_Declare(
-                    Virtools_SDK
+                    virtools_sdk
                     GIT_REPOSITORY https://github.com/doyaGu/Virtools-SDK-2.1.git
                     GIT_TAG main
             )
             message(STATUS "[CKPlugins] Downloading Virtools SDK")
-            FetchContent_MakeAvailable(Virtools_SDK)
+            FetchContent_MakeAvailable(virtools_sdk)
             set(VIRTOOLS_SDK_PATH "${virtools_sdk_SOURCE_DIR}" CACHE PATH "Path to the Virtools SDK" FORCE)
             set(FETCHCONTENT_BASE_DIR ${FETCHCONTENT_BASE_DIR_SAVE})
         else ()
@@ -140,7 +135,36 @@ if (NOT TARGET VxMath OR NOT TARGET CK2)
         endif ()
     endif ()
 
-    find_package(VirtoolsSDK REQUIRED HINTS "${VIRTOOLS_SDK_PATH}")
+    find_path(VIRTOOLS_SDK_INCLUDE_DIR CKAll.h
+            HINTS $ENV{VIRTOOLS_SDK_PATH} ${VIRTOOLS_SDK_PATH}
+            PATH_SUFFIXES Include Includes include includes
+    )
+    if (NOT VIRTOOLS_SDK_INCLUDE_DIR)
+        message(FATAL_ERROR "Virtools SDK headers not found. Expected CKAll.h under ${VIRTOOLS_SDK_PATH}.")
+    endif ()
+
+    foreach (_lib IN ITEMS CK2 VxMath)
+        find_library(VIRTOOLS_SDK_${_lib}_LIB NAMES ${_lib}
+                HINTS $ENV{VIRTOOLS_SDK_PATH} ${VIRTOOLS_SDK_PATH}
+                PATH_SUFFIXES Lib lib
+        )
+        if (NOT VIRTOOLS_SDK_${_lib}_LIB)
+            message(FATAL_ERROR "Virtools SDK library '${_lib}' not found under ${VIRTOOLS_SDK_PATH}.")
+        endif ()
+
+        if (NOT TARGET ${_lib})
+            add_library(${_lib} UNKNOWN IMPORTED)
+            set_target_properties(${_lib} PROPERTIES
+                    IMPORTED_LOCATION "${VIRTOOLS_SDK_${_lib}_LIB}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${VIRTOOLS_SDK_INCLUDE_DIR}"
+            )
+            target_compile_options(${_lib} INTERFACE
+                    $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:MSVC>:/Zc:strictStrings->>
+                    $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:GNU>:-fpermissive>>
+                    $<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:GNU>:-Wno-write-strings>>
+            )
+        endif ()
+    endforeach ()
 endif ()
 
 # =============================================================================
@@ -157,7 +181,6 @@ function(ckplugins_add_plugin TARGET_NAME)
     # Shared library (always built)
     add_library(${TARGET_NAME} SHARED ${PLUGIN_SOURCES})
     target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_compile_features(${TARGET_NAME} PRIVATE cxx_std_98)
     target_link_libraries(${TARGET_NAME} PRIVATE CK2 VxMath ${PLUGIN_LINKS})
     set_target_properties(${TARGET_NAME} PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
@@ -173,7 +196,6 @@ function(ckplugins_add_plugin TARGET_NAME)
 
         add_library(${TARGET_NAME}Static STATIC ${STATIC_SOURCES})
         target_include_directories(${TARGET_NAME}Static PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-        target_compile_features(${TARGET_NAME}Static PRIVATE cxx_std_98)
         target_link_libraries(${TARGET_NAME}Static PRIVATE CK2 VxMath ${PLUGIN_LINKS})
         set_target_properties(${TARGET_NAME}Static PROPERTIES
                 ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
