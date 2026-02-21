@@ -29,9 +29,9 @@ extern CKPluginInfo g_PluginInfo[READER_COUNT];
 struct BmpBitmapProperties : public CKBitmapProperties
 {
     BmpBitmapProperties() { Init(CKGUID(), nullptr); }
-    BmpBitmapProperties(const CKGUID &readerGuid, const char *ext) { Init(readerGuid, ext); }
+    BmpBitmapProperties(const CKGUID &readerGuid, CKSTRING ext) { Init(readerGuid, ext); }
 
-    void Init(const CKGUID &readerGuid, const char *ext)
+    void Init(const CKGUID &readerGuid, CKSTRING ext)
     {
         // Keep consistent with the original DLL: zero the whole struct, then set defaults.
         // (CKBitmapProperties is a plain data structure in Virtools SDK.)
@@ -54,9 +54,9 @@ struct BmpBitmapProperties : public CKBitmapProperties
 struct TgaBitmapProperties : public CKBitmapProperties
 {
     TgaBitmapProperties() { Init(CKGUID(), nullptr); }
-    TgaBitmapProperties(const CKGUID &readerGuid, const char *ext) { Init(readerGuid, ext); }
+    TgaBitmapProperties(const CKGUID &readerGuid, CKSTRING ext) { Init(readerGuid, ext); }
 
-    void Init(const CKGUID &readerGuid, const char *ext)
+    void Init(const CKGUID &readerGuid, CKSTRING ext)
     {
         memset(this, 0, sizeof(*this));
         m_Size = sizeof(TgaBitmapProperties);
@@ -79,9 +79,9 @@ struct TgaBitmapProperties : public CKBitmapProperties
 struct PcxBitmapProperties : public CKBitmapProperties
 {
     PcxBitmapProperties() { Init(CKGUID(), nullptr); }
-    PcxBitmapProperties(const CKGUID &readerGuid, const char *ext) { Init(readerGuid, ext); }
+    PcxBitmapProperties(const CKGUID &readerGuid, CKSTRING ext) { Init(readerGuid, ext); }
 
-    void Init(const CKGUID &readerGuid, const char *ext)
+    void Init(const CKGUID &readerGuid, CKSTRING ext)
     {
         memset(this, 0, sizeof(*this));
         m_Size = sizeof(PcxBitmapProperties);

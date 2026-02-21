@@ -47,7 +47,7 @@ public:
     }
 
     // --- File/Memory Loading ---
-    virtual CKERROR OpenFile(char *file);
+    virtual CKERROR OpenFile(CKSTRING file);
     virtual CKERROR ReadMemory(void *memory, int size);
 
     // --- Streaming Decode API ---

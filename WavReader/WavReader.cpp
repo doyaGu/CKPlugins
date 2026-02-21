@@ -83,7 +83,7 @@ void WAVReader::Cleanup()
 // File/Memory Loading
 //////////////////////////////////////////////////////////////////////
 
-CKERROR WAVReader::OpenFile(char *file)
+CKERROR WAVReader::OpenFile(CKSTRING file)
 {
     if (!file || strlen(file) == 0)
         return CKSOUND_READER_GENERICERR;

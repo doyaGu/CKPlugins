@@ -128,7 +128,7 @@ int AVIReader::GetMovieLength()
 Open a .AVI file and retrieve information : Number of
 frames and pixel format of the movie.
 *********************************************************/
-CKERROR AVIReader::OpenFile(char *name)
+CKERROR AVIReader::OpenFile(CKSTRING name)
 {
     // Try to create a AVIStream from the file , if failed return an error
     HRESULT hr = AVIStreamOpenFromFile(&m_Stream, name, streamtypeVIDEO, 0, OF_READ, NULL);

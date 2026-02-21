@@ -56,7 +56,7 @@ public:
 
 	//-----------------------------------
 	// Synchronous Reading from file or URL
-	virtual CKERROR OpenFile(char *name);
+	virtual CKERROR OpenFile(CKSTRING name);
 	// Decode a frame of the movie
 	virtual CKERROR ReadFrame(int f, CKMovieProperties **);
 
@@ -64,9 +64,9 @@ public:
 	// Not implemented methods
 
 	// Synchronous Reading from memory (Not implemented)
-	virtual CKERROR OpenMemory(char *name) { return CKERR_NOTIMPLEMENTED; }
+	virtual CKERROR OpenMemory(CKSTRING name) { return CKERR_NOTIMPLEMENTED; }
 	// ASynchronous Reading from file or URL (Not implemented)
-	virtual CKERROR OpenAsynchronousFile(char *name) { return CKERR_NOTIMPLEMENTED; }
+	virtual CKERROR OpenAsynchronousFile(CKSTRING name) { return CKERR_NOTIMPLEMENTED; }
 
 protected:
 	// Properties
