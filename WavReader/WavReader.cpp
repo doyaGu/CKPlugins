@@ -457,21 +457,21 @@ void WAVReader::Release()
 ///////////////////////////////////////////////////////////////////////
 
 #ifdef CK_LIB
-#define RegisterBehaviorDeclarations Register_WavReader_BehaviorDeclarations
-#define InitInstance _WavReader_InitInstance
-#define ExitInstance _WavReader_ExitInstance
-#define CKGetPluginInfoCount CKGet_WavReader_PluginInfoCount
-#define CKGetPluginInfo CKGet_WavReader_PluginInfo
-#define g_PluginInfo g_WavReader_PluginInfo
-#define CKGetReader CKGet_WavReader_Reader
+#define RegisterBehaviorDeclarations    Register_WavReader_BehaviorDeclarations
+#define InitInstance                    _WavReader_InitInstance
+#define ExitInstance                    _WavReader_ExitInstance
+#define CKGetPluginInfoCount            CKGet_WavReader_PluginInfoCount
+#define CKGetPluginInfo                 CKGet_WavReader_PluginInfo
+#define g_PluginInfo                    g_WavReader_PluginInfo
+#define CKGetReader                     CKGet_WavReader_Reader
 #else
-#define RegisterBehaviorDeclarations RegisterBehaviorDeclarations
-#define InitInstance InitInstance
-#define ExitInstance ExitInstance
-#define CKGetPluginInfoCount CKGetPluginInfoCount
-#define CKGetPluginInfo CKGetPluginInfo
-#define g_PluginInfo g_PluginInfo
-#define CKGetReader CKGetReader
+#define RegisterBehaviorDeclarations    RegisterBehaviorDeclarations
+#define InitInstance                    InitInstance
+#define ExitInstance                    ExitInstance
+#define CKGetPluginInfoCount            CKGetPluginInfoCount
+#define CKGetPluginInfo                 CKGetPluginInfo
+#define g_PluginInfo                    g_PluginInfo
+#define CKGetReader                     CKGetReader
 #endif
 
 #define READER_COUNT 1
