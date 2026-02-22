@@ -74,4 +74,14 @@ protected:
 	PAVISTREAM m_Stream;
 	PGETFRAME m_Frame;
 	int m_FrameCount;
+	int m_FrameStride;
+	bool m_TopDown;
+	bool m_ExpandTo32;
+	int m_OutputStride;
+
+	// If the decoder returns a top-down DIB (negative biHeight), convert frames to
+	// a bottom-up buffer with positive stride. The engine's movie blit path uses
+	// VxDoBlitUpsideDown and assumes a positive stride.
+	BYTE *m_TopDownBuffer;
+	int m_TopDownBufferSize;
 };
