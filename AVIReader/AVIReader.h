@@ -1,87 +1,67 @@
-#include "CKMovieReader.h"
+﻿#include "CKMovieReader.h"
 
-#include "Windows.h"
-#include "vfw.h"
+#include "AviDemuxer.h"
+#include "FrameDecoder.h"
+
+#include <memory>
+#include <vector>
 
 #define AVI_READER_VERSION 0x00000001
 #define AVI_READER_GUID CKGUID(0x67541bfe, 0x75e510c0)
 
 struct AVIMovieProperties : public CKMovieProperties
 {
-	// Ctor
-	AVIMovieProperties()
-	{
-		m_Size = sizeof(AVIMovieProperties);
-	}
+    AVIMovieProperties()
+    {
+        m_Size = sizeof(AVIMovieProperties);
+    }
 };
 
-/*************************************************
- The AVIReader class is derived from CKMovieReader.
- + It overloads the OpenFile method that will be used
- to load a movie file.
- +
-**************************************************/
+// ---------------------------------------------------------------------------
+// AVIReader -- dependency-free AVI movie reader.
+// Uses an internal RIFF/AVI demuxer (classic + OpenDML)
+// and frame decoder (BI_RGB / MJPEG) with no VFW dependency.
+// ---------------------------------------------------------------------------
 class AVIReader : public CKMovieReader
 {
 public:
-	AVIReader();
-	~AVIReader();
+    AVIReader();
+    ~AVIReader();
 
-	//-------------------------
-	// Called by the engine when the reader is not
-	// needed any more
-	void Release() { delete this; }
+    void Release() override { delete this; }
 
-	void ReleaseAVI();
+    CKPluginInfo *GetReaderInfo() override;
 
-	//-----------------------------------
-	// Reader Properties
-	CKPluginInfo *GetReaderInfo();
+    int GetOptionsCount() override { return 0; }
+    CKSTRING GetOptionDescription(int i) override { return nullptr; }
 
-	//-----------------------------------
-	// There is no specific options for this reader
-	// as it can not save any file...
-	int GetOptionsCount() { return 0; }
-	CKSTRING GetOptionDescription(int i) { return NULL; }
+    CK_DATAREADER_FLAGS GetFlags() override { return CK_DATAREADER_FILELOAD; }
 
-	//-----------------------------------
-	// Movie Reader Capabilities, in our case the reader is only able to
-	// load file from a local disk
-	virtual CK_DATAREADER_FLAGS GetFlags() { return CK_DATAREADER_FILELOAD; }
+    int GetMovieFrameCount() override;
+    int GetMovieLength() override;
 
-	// Frame Count
-	virtual int GetMovieFrameCount();
-	// Length in ms
-	virtual int GetMovieLength();
+    CKERROR OpenFile(CKSTRING name) override;
+    CKERROR ReadFrame(int f, CKMovieProperties **mp) override;
 
-	//-----------------------------------
-	// Synchronous Reading from file or URL
-	virtual CKERROR OpenFile(CKSTRING name);
-	// Decode a frame of the movie
-	virtual CKERROR ReadFrame(int f, CKMovieProperties **);
-
-	//----------------------------------------
-	// Not implemented methods
-
-	// Synchronous Reading from memory (Not implemented)
-	virtual CKERROR OpenMemory(CKSTRING name) { return CKERR_NOTIMPLEMENTED; }
-	// ASynchronous Reading from file or URL (Not implemented)
-	virtual CKERROR OpenAsynchronousFile(CKSTRING name) { return CKERR_NOTIMPLEMENTED; }
+    CKERROR OpenMemory(CKSTRING name) override { return CKERR_NOTIMPLEMENTED; }
+    CKERROR OpenAsynchronousFile(CKSTRING name) override { return CKERR_NOTIMPLEMENTED; }
 
 protected:
-	// Properties
-	AVIMovieProperties m_Properties;
-	PAVISTREAM m_Stream;
-	PGETFRAME m_Frame;
-	int m_FrameCount;
-	int m_FrameStride;
-	bool m_TopDown;
-	bool m_ExpandTo32;
-	int m_OutputStride;
+    void ReleaseAll();
+    bool DecodeFramePayload(int frameIndex);
+    bool DecodeFrameWithDependencies(int frameIndex);
 
-	// If the decoder returns a top-down DIB (negative biHeight), convert frames to
-	// a bottom-up buffer with positive stride. The engine's movie blit path uses
-	// VxDoBlitUpsideDown and assumes a positive stride.
-	BYTE *m_TopDownBuffer;
-	int m_TopDownBufferSize;
+    AVIMovieProperties             m_Properties;
+    AviDemuxer                     m_Demuxer;
+    std::unique_ptr<IFrameDecoder> m_Decoder;
+    int                            m_VideoStream;    ///< Index of selected video stream.
+    int                            m_FrameCount;
+
+    // Owned frame buffer: 32bpp ARGB, bottom-up layout.
+    std::vector<uint8_t>           m_FrameBuffer;
+    int                            m_OutputStride;
+
+    // Temporary buffer for compressed frame data.
+    std::vector<uint8_t>           m_CompressedBuf;
+    int                            m_LastDecodedFrame;
 };

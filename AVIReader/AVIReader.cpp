@@ -2,54 +2,20 @@
 
 #include "VxMath.h"
 
-#include <string.h>
-#include <limits.h>
+#include <cstring>
+#include <limits>
 
-static int ComputeStrideBytes(LONG width, WORD bitsPerPixel)
+namespace
 {
-    if (width <= 0 || bitsPerPixel == 0)
-        return 0;
 
-    const unsigned long long bitsPerLine = static_cast<unsigned long long>(width) * static_cast<unsigned long long>(bitsPerPixel);
-    const unsigned long long stride = ((bitsPerLine + 31ULL) & ~31ULL) / 8ULL;
-    if (stride == 0 || stride > static_cast<unsigned long long>(INT_MAX))
-        return 0;
+constexpr int kMaxVideoDimension = 16384;
+constexpr size_t kMaxOutputFrameBytes = 256u * 1024u * 1024u; // 256 MiB
 
-    return static_cast<int>(stride);
-}
+} // namespace
 
-static BYTE *GetDibBits(BITMAPINFO *bi)
-{
-    if (!bi)
-        return NULL;
-
-    const BITMAPINFOHEADER &header = bi->bmiHeader;
-    if (header.biSize < sizeof(BITMAPINFOHEADER))
-        return NULL;
-
-    BYTE *bits = reinterpret_cast<BYTE *>(bi) + header.biSize;
-    const bool hasLegacyInfoHeader = (header.biSize == sizeof(BITMAPINFOHEADER));
-    if (hasLegacyInfoHeader && header.biCompression == BI_BITFIELDS)
-    {
-        bits += 3 * sizeof(DWORD);
-    }
-#ifdef BI_ALPHABITFIELDS
-    else if (hasLegacyInfoHeader && header.biCompression == BI_ALPHABITFIELDS)
-    {
-        bits += 4 * sizeof(DWORD);
-    }
-#endif
-    else
-    {
-        DWORD colorCount = header.biClrUsed;
-        if (colorCount == 0 && header.biBitCount <= 8)
-            colorCount = 1u << header.biBitCount;
-
-        bits += colorCount * sizeof(RGBQUAD);
-    }
-
-    return bits;
-}
+// ===========================================================================
+// Plugin entry points (CK_LIB / DLL naming)
+// ===========================================================================
 
 #ifdef CK_LIB
 #define RegisterBehaviorDeclarations    Register_AviReader_BehaviorDeclarations
@@ -72,11 +38,6 @@ static BYTE *GetDibBits(BITMAPINFO *bi)
 #define READER_COUNT 1
 CKPluginInfo g_PluginInfo;
 
-/**********************************************
- Called by the engine when a file with the AVI
- extension is being loaded, a reader has to be
- created.
-***********************************************/
 PLUGIN_EXPORT CKDataReader *CKGetReader(int pos)
 {
     return new AVIReader();
@@ -87,382 +48,256 @@ PLUGIN_EXPORT int CKGetPluginInfoCount()
     return READER_COUNT;
 }
 
-/**********************************************
-Called by the engine when it parses for available
-plugins. Returns the information about this plugin.
-The more important being the extension for the
-movie files it is able to load (in this case "Avi".
-***********************************************/
 PLUGIN_EXPORT CKPluginInfo *CKGetPluginInfo(int index)
 {
-    g_PluginInfo.m_Author = "Virtools";
-    g_PluginInfo.m_Description = "Win32 AVI Movie Reader";
+    g_PluginInfo.m_Author = "Ballanced";
+    g_PluginInfo.m_Description = "Dependency-free AVI Movie Reader";
     g_PluginInfo.m_Extension = "Avi";
     g_PluginInfo.m_Type = CKPLUGIN_MOVIE_READER;
     g_PluginInfo.m_Version = AVI_READER_VERSION;
-    g_PluginInfo.m_InitInstanceFct = NULL;
+    g_PluginInfo.m_InitInstanceFct = nullptr;
     g_PluginInfo.m_GUID = AVI_READER_GUID;
     g_PluginInfo.m_Summary = "AVI Reader";
     return &g_PluginInfo;
 }
 
-/**************************************************
- Ctor: initialize data
-***************************************************/
+// ===========================================================================
+// Construction / destruction
+// ===========================================================================
+
 AVIReader::AVIReader()
+    : m_VideoStream(-1),
+      m_FrameCount(0),
+      m_OutputStride(0),
+      m_LastDecodedFrame(-1)
 {
     m_Properties.m_Ext = "avi";
     m_Properties.m_ReaderGuid = AVI_READER_GUID;
-    m_Properties.m_Data = NULL;
-
-    m_Stream = NULL;
-    m_Frame = NULL;
-    m_FrameCount = 0;
-
-    m_FrameStride = 0;
-    m_TopDown = false;
-    m_ExpandTo32 = false;
-    m_OutputStride = 0;
-    m_TopDownBuffer = NULL;
-    m_TopDownBufferSize = 0;
-
-    // AVI initialization
-    AVIFileInit();
+    m_Properties.m_Data = nullptr;
 }
 
-/*****************************************
- Destructor: Free memory and release AVI handles
-******************************************/
 AVIReader::~AVIReader()
 {
-    // if bitmap data was still present we need to release it
-    m_Properties.m_Data = NULL;
-
-    // release the AVI Data
-    ReleaseAVI();
-    // AVI initialization
-    AVIFileExit();
+    ReleaseAll();
 }
 
-/******************************************
- Returns information about the reader which
- is the same as given to the engine at
- initialisation.
-*******************************************/
 CKPluginInfo *AVIReader::GetReaderInfo()
 {
     return &g_PluginInfo;
 }
 
-/*******************************************
- Release all AVI Handles
-********************************************/
-void AVIReader::ReleaseAVI()
+void AVIReader::ReleaseAll()
 {
-    if (m_TopDownBuffer)
-        delete[] m_TopDownBuffer;
-    m_TopDownBuffer = NULL;
-    m_TopDownBufferSize = 0;
-
-    if (m_Frame)
-        AVIStreamGetFrameClose(m_Frame);
-    m_Frame = NULL;
-
-    if (m_Stream)
-        AVIStreamRelease(m_Stream);
-    m_Stream = NULL;
-
+    m_Decoder.reset();
+    m_Demuxer.Close();
+    m_VideoStream = -1;
     m_FrameCount = 0;
-    m_FrameStride = 0;
-    m_TopDown = false;
-    m_ExpandTo32 = false;
     m_OutputStride = 0;
-
-    m_Properties.m_Data = NULL;
+    m_FrameBuffer.clear();
+    m_CompressedBuf.clear();
+    m_LastDecodedFrame = -1;
+    m_Properties.m_Data = nullptr;
 }
 
-/*******************************************
- Number of frames in the movie file
-*******************************************/
+// ===========================================================================
+// Query methods
+// ===========================================================================
+
 int AVIReader::GetMovieFrameCount()
 {
     return m_FrameCount;
 }
 
-/*******************************************
- Length in Ms of the move.
-*******************************************/
 int AVIReader::GetMovieLength()
 {
-    if (!m_Stream)
+    if (m_VideoStream < 0)
         return 0;
-
-    return AVIStreamSampleToTime(m_Stream, m_FrameCount);
+    return m_Demuxer.GetDurationMs(m_VideoStream);
 }
 
-/*********************************************************
-Open a .AVI file and retrieve information : Number of
-frames and pixel format of the movie.
-*********************************************************/
+bool AVIReader::DecodeFramePayload(int frameIndex)
+{
+    const avi::AviStreamInfo *info = m_Demuxer.GetStreamInfo(m_VideoStream);
+    if (!info)
+        return false;
+
+    if (!m_Demuxer.ReadFrameData(m_VideoStream, frameIndex, m_CompressedBuf))
+        return false;
+
+    return m_Decoder->Decode(m_CompressedBuf.data(), m_CompressedBuf.size(),
+                             info->width, info->height,
+                             m_FrameBuffer.data(), m_OutputStride);
+}
+
+bool AVIReader::DecodeFrameWithDependencies(int frameIndex)
+{
+    if (!m_Decoder->NeedsSequentialFrames())
+    {
+        if (!DecodeFramePayload(frameIndex))
+            return false;
+        m_LastDecodedFrame = frameIndex;
+        return true;
+    }
+
+    if (m_LastDecodedFrame == frameIndex)
+        return true;
+
+    int startFrame = 0;
+    if (m_LastDecodedFrame >= 0 && frameIndex > m_LastDecodedFrame)
+    {
+        // When already decoded up to N, decoding N+1..target preserves correctness.
+        startFrame = m_LastDecodedFrame + 1;
+    }
+    else
+    {
+        // Strict seek correctness for delta codecs: do not trust index keyframe flags.
+        // Re-decode from frame 0 whenever seeking backwards or to unrelated positions.
+        m_Decoder->Reset();
+        m_LastDecodedFrame = -1;
+        startFrame = 0;
+    }
+
+    for (int i = startFrame; i <= frameIndex; ++i)
+    {
+        if (!DecodeFramePayload(i))
+        {
+            m_LastDecodedFrame = -1;
+            return false;
+        }
+        m_LastDecodedFrame = i;
+    }
+
+    return true;
+}
+
+// ===========================================================================
+// OpenFile
+// ===========================================================================
+
 CKERROR AVIReader::OpenFile(CKSTRING name)
 {
     if (!name || !name[0])
         return CKMOVIEERROR_READERROR;
 
-    ReleaseAVI();
+    ReleaseAll();
 
-    // Try to create a AVIStream from the file , if failed return an error
-    HRESULT hr = 0;
-#if defined(UNICODE) || defined(_UNICODE)
-    WCHAR wName[MAX_PATH];
-    wName[0] = L'\0';
-    const int conv = MultiByteToWideChar(CP_ACP, 0, name, -1, wName, MAX_PATH);
-    if (conv <= 0)
-        return CKMOVIEERROR_READERROR;
-    hr = AVIStreamOpenFromFileW(&m_Stream, wName, streamtypeVIDEO, 0, OF_READ, NULL);
-#else
-    hr = AVIStreamOpenFromFileA(&m_Stream, name, streamtypeVIDEO, 0, OF_READ, NULL);
-#endif
-    if (hr)
+    // --- 1. Open and parse the AVI container ---
+    if (!m_Demuxer.Open(name))
         return CKMOVIEERROR_UNSUPPORTEDFILE;
 
-    // Try to open frames. Prefer 32bpp output to match engine texture format and
-    // avoid potential 16bpp conversion issues during movie blits.
-    BITMAPINFOHEADER wanted;
-    memset(&wanted, 0, sizeof(wanted));
-    wanted.biSize = sizeof(BITMAPINFOHEADER);
-    wanted.biPlanes = 1;
-    wanted.biBitCount = 32;
-    wanted.biCompression = BI_RGB;
-    m_Frame = AVIStreamGetFrameOpen(m_Stream, &wanted);
-    if (!m_Frame)
-        m_Frame = AVIStreamGetFrameOpen(m_Stream, NULL);
-    if (!m_Frame)
-        m_Frame = AVIStreamGetFrameOpen(m_Stream, (BITMAPINFOHEADER *)AVIGETFRAMEF_BESTDISPLAYFMT);
-    if (!m_Frame)
+    // --- 2. Find the first video stream ---
+    m_VideoStream = m_Demuxer.FindFirstVideoStream();
+    if (m_VideoStream < 0)
     {
-        ReleaseAVI();
+        ReleaseAll();
         return CKMOVIEERROR_UNSUPPORTEDFILE;
     }
 
-    // Try to get the first frame of the movie
-    const LONG streamStart = AVIStreamStart(m_Stream);
-    if (streamStart < 0)
+    const avi::AviStreamInfo *info = m_Demuxer.GetStreamInfo(m_VideoStream);
+    if (!info || info->width <= 0 || info->height <= 0)
     {
-        ReleaseAVI();
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+    if (info->width > kMaxVideoDimension || info->height > kMaxVideoDimension)
+    {
+        ReleaseAll();
         return CKMOVIEERROR_UNSUPPORTEDFILE;
     }
 
-    if (void *dib = AVIStreamGetFrame(m_Frame, streamStart))
+    // --- 3. Create the appropriate frame decoder ---
+    m_Decoder = CreateFrameDecoder(*info);
+    if (!m_Decoder)
     {
-        BITMAPINFO *bi = (BITMAPINFO *)dib;
-        const BITMAPINFOHEADER &header = bi->bmiHeader;
-        BYTE *BitData = GetDibBits(bi);
-
-        if (!BitData || header.biWidth <= 0 || header.biHeight == 0 || header.biBitCount <= 0 || header.biHeight == LONG_MIN)
-        {
-            ReleaseAVI();
-            return CKMOVIEERROR_UNSUPPORTEDFILE;
-        }
-
-        const int absHeight = (header.biHeight < 0) ? static_cast<int>(-header.biHeight) : static_cast<int>(header.biHeight);
-        int bytesPerLine = 0;
-        if (header.biSizeImage > 0 && absHeight > 0)
-        {
-            const unsigned long long strideFromImage = static_cast<unsigned long long>(header.biSizeImage) / static_cast<unsigned long long>(absHeight);
-            if (strideFromImage > 0 && strideFromImage <= static_cast<unsigned long long>(INT_MAX))
-                bytesPerLine = static_cast<int>(strideFromImage);
-        }
-        if (bytesPerLine <= 0)
-            bytesPerLine = ComputeStrideBytes(header.biWidth, header.biBitCount);
-        if (bytesPerLine <= 0)
-        {
-            ReleaseAVI();
-            return CKMOVIEERROR_UNSUPPORTEDFILE;
-        }
-
-        // Decode output settings
-        m_TopDown = (header.biHeight < 0);
-        m_FrameStride = bytesPerLine;
-
-        m_ExpandTo32 = (header.biBitCount == 16);
-        if (m_ExpandTo32)
-        {
-            m_OutputStride = header.biWidth * 4;
-            m_Properties.m_Format.Width = header.biWidth;
-            m_Properties.m_Format.Height = absHeight;
-            m_Properties.m_Format.BitsPerPixel = 32;
-            m_Properties.m_Format.BytesPerLine = m_OutputStride;
-            m_Properties.m_Format.RedMask = R_MASK;
-            m_Properties.m_Format.GreenMask = G_MASK;
-            m_Properties.m_Format.BlueMask = B_MASK;
-            m_Properties.m_Format.AlphaMask = A_MASK;
-        }
-        else
-        {
-            m_OutputStride = bytesPerLine;
-            m_Properties.m_Format.Width = header.biWidth;
-            m_Properties.m_Format.Height = absHeight;
-            m_Properties.m_Format.BitsPerPixel = (char)header.biBitCount;
-            m_Properties.m_Format.BytesPerLine = bytesPerLine;
-            VxBppToMask(m_Properties.m_Format);
-            m_Properties.m_Format.AlphaMask = 0;
-        }
-
-        // Get the number of frame in the movie
-        m_FrameCount = AVIStreamLength(m_Stream);
-        if (m_FrameCount <= 0)
-        {
-            ReleaseAVI();
-            return CKMOVIEERROR_UNSUPPORTEDFILE;
-        }
-    }
-    else
-    {
-        ReleaseAVI();
+        ReleaseAll();
         return CKMOVIEERROR_UNSUPPORTEDFILE;
     }
 
+    // --- 4. Set up output format (always 32bpp ARGB, bottom-up) ---
+    m_FrameCount = m_Demuxer.GetFrameCount(m_VideoStream);
+    if (m_FrameCount <= 0)
+    {
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+
+    const int width = info->width;
+    const int height = info->height;
+    if (width > std::numeric_limits<int>::max() / 4)
+    {
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+    m_OutputStride = width * 4; // 32bpp, no padding needed
+    if (height > std::numeric_limits<int>::max() / m_OutputStride)
+    {
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+    if (static_cast<size_t>(height) >
+        (std::numeric_limits<size_t>::max() / static_cast<size_t>(m_OutputStride)))
+    {
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+    const size_t frameBytes = static_cast<size_t>(m_OutputStride) * static_cast<size_t>(height);
+    if (frameBytes == 0 || frameBytes > kMaxOutputFrameBytes)
+    {
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+
+    m_Properties.m_Format.Width = width;
+    m_Properties.m_Format.Height = height;
+    m_Properties.m_Format.BitsPerPixel = 32;
+    m_Properties.m_Format.BytesPerLine = m_OutputStride;
+    m_Properties.m_Format.RedMask = R_MASK;
+    m_Properties.m_Format.GreenMask = G_MASK;
+    m_Properties.m_Format.BlueMask = B_MASK;
+    m_Properties.m_Format.AlphaMask = A_MASK;
+
+    // Pre-allocate the frame buffer.
+    try
+    {
+        m_FrameBuffer.resize(frameBytes);
+    }
+    catch (...)
+    {
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+
+    // --- 5. Verify we can decode the first frame ---
+    m_Decoder->Reset();
+    if (!DecodeFrameWithDependencies(0))
+    {
+        ReleaseAll();
+        return CKMOVIEERROR_UNSUPPORTEDFILE;
+    }
+
+    m_Properties.m_Data = m_FrameBuffer.data();
     return CK_OK;
 }
 
-/*****************************************************
- + Decode a frame of the movie.
- f is the requested frame.
- mp parameters will be filled with the format of the image.
- mp.m_Data will contain a pointer to the bitmap data.
-******************************************************/
+// ===========================================================================
+// ReadFrame
+// ===========================================================================
+
 CKERROR AVIReader::ReadFrame(int f, CKMovieProperties **mp)
 {
-    if (!mp || !m_Frame || !m_Stream)
+    if (!mp || m_VideoStream < 0 || !m_Decoder)
         return CKMOVIEERROR_GENERIC;
-    *mp = NULL;
+    *mp = nullptr;
 
-    if ((DWORD)f >= (DWORD)m_FrameCount)
+    if (f < 0 || f >= m_FrameCount)
         return CKMOVIEERROR_GENERIC;
 
-    const LONG streamStart = AVIStreamStart(m_Stream);
-    void *dib = AVIStreamGetFrame(m_Frame, f + streamStart);
-    if (!dib)
-        return CKMOVIEERROR_READERROR;
-
-    BITMAPINFO *bi = (BITMAPINFO *)dib;
-    const BITMAPINFOHEADER &header = bi->bmiHeader;
-    BYTE *BitData = GetDibBits(bi);
-    if (!BitData)
-        return CKMOVIEERROR_READERROR;
-
-    const bool frameTopDown = (header.biHeight < 0);
-    const int absHeight = (header.biHeight < 0) ? static_cast<int>(-header.biHeight) : static_cast<int>(header.biHeight);
-    if (header.biWidth != m_Properties.m_Format.Width ||
-        absHeight != m_Properties.m_Format.Height ||
-        header.biBitCount != (m_ExpandTo32 ? 16 : (WORD)m_Properties.m_Format.BitsPerPixel))
+    if (!DecodeFrameWithDependencies(f))
     {
         return CKMOVIEERROR_READERROR;
     }
 
-    int strideNow = 0;
-    if (header.biSizeImage > 0 && absHeight > 0)
-    {
-        const unsigned long long strideFromImage = static_cast<unsigned long long>(header.biSizeImage) / static_cast<unsigned long long>(absHeight);
-        if (strideFromImage > 0 && strideFromImage <= static_cast<unsigned long long>(INT_MAX))
-            strideNow = static_cast<int>(strideFromImage);
-    }
-    if (strideNow <= 0)
-        strideNow = ComputeStrideBytes(header.biWidth, header.biBitCount);
-    if (strideNow <= 0)
-        strideNow = m_FrameStride;
-    if (strideNow <= 0)
-        return CKMOVIEERROR_READERROR;
-
-    const int height = m_Properties.m_Format.Height;
-    const int srcStride = strideNow;
-    const int requiredSrc = (height > 0 && srcStride > 0) ? (height * srcStride) : 0;
-    if (requiredSrc <= 0)
-        return CKMOVIEERROR_READERROR;
-
-    if (header.biSizeImage > 0 && header.biSizeImage < (DWORD)requiredSrc)
-        return CKMOVIEERROR_READERROR;
-
-    if (m_ExpandTo32)
-    {
-        const int dstStride = m_OutputStride;
-        const int requiredDst = height * dstStride;
-        if (!m_TopDownBuffer || m_TopDownBufferSize < requiredDst)
-        {
-            delete[] m_TopDownBuffer;
-            m_TopDownBuffer = new BYTE[requiredDst];
-            m_TopDownBufferSize = requiredDst;
-        }
-
-        // Convert into bottom-up 32bpp ARGB buffer (first row is bottom row).
-        for (int y = 0; y < height; ++y)
-        {
-            const int srcIndex = frameTopDown ? (height - 1 - y) : y;
-            const BYTE *srcRow = BitData + srcIndex * srcStride;
-            XDWORD *dstRow = (XDWORD *)(m_TopDownBuffer + y * dstStride);
-
-            const WORD *src16 = (const WORD *)srcRow;
-            for (int x = 0; x < m_Properties.m_Format.Width; ++x)
-            {
-                const WORD p = src16[x];
-                // Assume 16bpp BI_RGB is 5-5-5 (Windows default).
-                const XDWORD r5 = (p >> 10) & 0x1F;
-                const XDWORD g5 = (p >> 5) & 0x1F;
-                const XDWORD b5 = (p)&0x1F;
-                const XDWORD r = (r5 * 255u) / 31u;
-                const XDWORD g = (g5 * 255u) / 31u;
-                const XDWORD b = (b5 * 255u) / 31u;
-                dstRow[x] = 0xFF000000u | (r << 16) | (g << 8) | b;
-            }
-        }
-
-        BitData = m_TopDownBuffer;
-    }
-    else
-    {
-        // Always copy into an owned buffer (bottom-up layout) to avoid exposing VFW internal pointers.
-        const int dstStride = m_OutputStride;
-        const int requiredDst = height * dstStride;
-        if (!m_TopDownBuffer || m_TopDownBufferSize < requiredDst)
-        {
-            delete[] m_TopDownBuffer;
-            m_TopDownBuffer = new BYTE[requiredDst];
-            m_TopDownBufferSize = requiredDst;
-        }
-
-        const int copyBytes = (srcStride < dstStride) ? srcStride : dstStride;
-        if (copyBytes <= 0)
-            return CKMOVIEERROR_READERROR;
-
-        if (frameTopDown)
-        {
-            // Output buffer is bottom-up: first row in memory is bottom row.
-            for (int y = 0; y < height; ++y)
-            {
-                const BYTE *srcRow = BitData + (height - 1 - y) * srcStride;
-                BYTE *dstRow = m_TopDownBuffer + y * dstStride;
-                memcpy(dstRow, srcRow, (size_t)copyBytes);
-                if (dstStride > copyBytes)
-                    memset(dstRow + copyBytes, 0, (size_t)(dstStride - copyBytes));
-            }
-        }
-        else
-        {
-            for (int y = 0; y < height; ++y)
-            {
-                const BYTE *srcRow = BitData + y * srcStride;
-                BYTE *dstRow = m_TopDownBuffer + y * dstStride;
-                memcpy(dstRow, srcRow, (size_t)copyBytes);
-                if (dstStride > copyBytes)
-                    memset(dstRow + copyBytes, 0, (size_t)(dstStride - copyBytes));
-            }
-        }
-
-        BitData = m_TopDownBuffer;
-    }
-
-    m_Properties.m_Data = BitData;
-    *mp = (CKMovieProperties *)&m_Properties;
+    m_Properties.m_Data = m_FrameBuffer.data();
+    *mp = &m_Properties;
     return CK_OK;
 }
