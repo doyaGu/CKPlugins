@@ -5,21 +5,21 @@
 #include "PcxReader.h"
 
 #ifdef CK_LIB
-#define RegisterBehaviorDeclarations Register_ImageReader_BehaviorDeclarations
-#define InitInstance _ImageReader_InitInstance
-#define ExitInstance _ImageReader_ExitInstance
-#define CKGetPluginInfoCount CKGet_ImageReader_PluginInfoCount
-#define CKGetPluginInfo CKGet_ImageReader_PluginInfo
-#define g_PluginInfo g_ImageReader_PluginInfo
-#define CKGetReader CKGet_ImageReader_Reader
+#define RegisterBehaviorDeclarations    Register_ImageReader_BehaviorDeclarations
+#define InitInstance                    _ImageReader_InitInstance
+#define ExitInstance                    _ImageReader_ExitInstance
+#define CKGetPluginInfoCount            CKGet_ImageReader_PluginInfoCount
+#define CKGetPluginInfo                 CKGet_ImageReader_PluginInfo
+#define g_PluginInfo                    g_ImageReader_PluginInfo
+#define CKGetReader                     CKGet_ImageReader_Reader
 #else
-#define RegisterBehaviorDeclarations RegisterBehaviorDeclarations
-#define InitInstance InitInstance
-#define ExitInstance ExitInstance
-#define CKGetPluginInfoCount CKGetPluginInfoCount
-#define CKGetPluginInfo CKGetPluginInfo
-#define g_PluginInfo g_PluginInfo
-#define CKGetReader CKGetReader
+#define RegisterBehaviorDeclarations    RegisterBehaviorDeclarations
+#define InitInstance                    InitInstance
+#define ExitInstance                    ExitInstance
+#define CKGetPluginInfoCount            CKGetPluginInfoCount
+#define CKGetPluginInfo                 CKGetPluginInfo
+#define g_PluginInfo                    g_PluginInfo
+#define CKGetReader                     CKGetReader
 #endif
 
 #define READER_INDEX_BMP 0
