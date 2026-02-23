@@ -32,6 +32,97 @@ bool AddI64Overflow(int64_t a, int64_t b, int64_t &out)
     return false;
 }
 
+struct ChunkIdMap
+{
+    uint32_t chunkId;
+    int streamIdx;
+};
+
+int FindStreamIndexByChunkId(const std::vector<ChunkIdMap> &idMap, uint32_t chunkId)
+{
+    for (const auto &m : idMap)
+    {
+        if (m.chunkId == chunkId)
+            return m.streamIdx;
+    }
+    return -1;
+}
+
+bool ComputeIdx1Offsets(const avi::AviOldIndexEntry &e, int64_t base, int64_t fileSize,
+                        int64_t &dataOffset, int64_t &headerOffset)
+{
+    if (base < 0 || base > fileSize)
+        return false;
+    if (AddI64Overflow(base, static_cast<int64_t>(e.dwOffset) + 8, dataOffset))
+        return false;
+    headerOffset = dataOffset - 8;
+    if (headerOffset < 0 || dataOffset < 0)
+        return false;
+    if (headerOffset + 8 > fileSize)
+        return false;
+    if (dataOffset + static_cast<int64_t>(e.dwSize) > fileSize)
+        return false;
+    return true;
+}
+
+bool IsIdx1EntryOffsetInBounds(const avi::AviOldIndexEntry &e, int64_t base, int64_t fileSize)
+{
+    int64_t dataOffset = 0;
+    int64_t headerOffset = 0;
+    return ComputeIdx1Offsets(e, base, fileSize, dataOffset, headerOffset);
+}
+
+bool IsIdx1EntryOffsetHeaderValid(RiffReader &reader, const avi::AviOldIndexEntry &e,
+                                  int64_t base, int64_t fileSize)
+{
+    int64_t dataOffset = 0;
+    int64_t headerOffset = 0;
+    if (!ComputeIdx1Offsets(e, base, fileSize, dataOffset, headerOffset))
+        return false;
+
+    uint8_t hdr[8];
+    if (!reader.ReadAt(headerOffset, hdr, sizeof(hdr)))
+        return false;
+
+    const uint32_t chunkId   = avi::ReadLe32(hdr + 0);
+    const uint32_t chunkSize = avi::ReadLe32(hdr + 4);
+    if (chunkId != e.dwChunkId)
+        return false;
+    if (chunkSize < e.dwSize)
+        return false;
+    return true;
+}
+
+bool ResolveIdx1EntryBaseByBounds(const avi::AviOldIndexEntry &e, int64_t preferredBase,
+                                  bool haveMoviBase, int64_t moviIdOffset, int64_t fileSize,
+                                  int64_t &resolvedBase)
+{
+    resolvedBase = preferredBase;
+    if (IsIdx1EntryOffsetInBounds(e, resolvedBase, fileSize))
+        return true;
+
+    const int64_t altBase = (resolvedBase == 0 && haveMoviBase) ? moviIdOffset : 0;
+    if (!IsIdx1EntryOffsetInBounds(e, altBase, fileSize))
+        return false;
+    resolvedBase = altBase;
+    return true;
+}
+
+bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIndexEntry &e,
+                                  int64_t preferredBase, bool haveMoviBase, int64_t moviIdOffset,
+                                  int64_t fileSize, int64_t &resolvedBase)
+{
+    resolvedBase = preferredBase;
+    if (IsIdx1EntryOffsetHeaderValid(reader, e, resolvedBase, fileSize))
+        return true;
+
+    const int64_t altBase = (resolvedBase == 0 && haveMoviBase) ? moviIdOffset : 0;
+    if (!IsIdx1EntryOffsetHeaderValid(reader, e, altBase, fileSize))
+        return false;
+    resolvedBase = altBase;
+    return true;
+}
+
 } // namespace
 
 // ===========================================================================
@@ -378,8 +469,8 @@ bool AviDemuxer::ParseStreamList(const RiffReader::Chunk &strlChunk)
         }
         else if (child.id == avi::kFourCC_indx && foundStrh)
         {
-            // OpenDML super-index for this stream.
-            ParseSuperIndex(child, stream);
+            if (!ParseStreamIndex(child, stream))
+                return false;
         }
 
         if (!m_Reader.SkipChunk(child))
@@ -460,7 +551,8 @@ bool AviDemuxer::ParseVideoFormat(const RiffReader::Chunk &chunk, avi::BitmapInf
         stream.info.redMask = 0x00FF0000u;
         stream.info.greenMask = 0x0000FF00u;
         stream.info.blueMask = 0x000000FFu;
-        stream.info.alphaMask = 0xFF000000u;
+        // BI_RGB 32bpp is usually BGRX (opaque), not BGRA.
+        stream.info.alphaMask = 0;
     }
 
     // Parse optional palette for indexed DIB formats.
@@ -511,6 +603,37 @@ bool AviDemuxer::ParseAudioFormat(const RiffReader::Chunk &chunk, avi::WaveForma
     return m_Reader.Read(&wfh, toRead);
 }
 
+bool AviDemuxer::ParseStreamIndex(const RiffReader::Chunk &chunk, StreamEntry &stream)
+{
+    if (chunk.size < sizeof(avi::AviSuperIndexHeader))
+        return false;
+
+    avi::AviSuperIndexHeader hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    if (!m_Reader.Read(&hdr, sizeof(hdr)))
+        return false;
+
+    // Field-indexed OpenDML is not implemented yet.
+    if (hdr.bIndexSubType == avi::kAVI_INDEX_2FIELD || hdr.wLongsPerEntry == 3)
+        return false;
+
+    if (!m_Reader.SeekTo(chunk.dataOffset))
+        return false;
+
+    if (hdr.bIndexType == avi::kAVI_INDEX_OF_INDEXES)
+        return ParseSuperIndex(chunk, stream);
+
+    if (hdr.bIndexType == avi::kAVI_INDEX_OF_CHUNKS)
+    {
+        const int64_t chunkOffset = chunk.dataOffset - 8;
+        if (chunkOffset < 0)
+            return false;
+        return ParseStandardIndex(chunkOffset, chunk.size + 8u, hdr.dwChunkId, stream.headerIndex);
+    }
+
+    return false;
+}
+
 bool AviDemuxer::ParseSuperIndex(const RiffReader::Chunk &chunk, StreamEntry &stream)
 {
     if (chunk.size < sizeof(avi::AviSuperIndexHeader))
@@ -554,11 +677,11 @@ bool AviDemuxer::ParseSuperIndex(const RiffReader::Chunk &chunk, StreamEntry &st
 
 bool AviDemuxer::BuildIndex()
 {
-    // Prefer OpenDML super-index if any stream has one.
+    // Prefer OpenDML index forms if any stream has one.
     bool hasOpenDml = false;
     for (const auto &s : m_Streams)
     {
-        if (!s.superIndex.empty())
+        if (!s.superIndex.empty() || !s.headerIndex.empty())
         {
             hasOpenDml = true;
             break;
@@ -595,12 +718,30 @@ bool AviDemuxer::BuildIdx1Index()
     if (entryCount > kMaxIdx1Entries)
         return false;
 
+    size_t idx1Bytes = 0;
+    if (MulSizeOverflow(static_cast<size_t>(entryCount), sizeof(avi::AviOldIndexEntry), idx1Bytes))
+        return false;
+
+    std::vector<avi::AviOldIndexEntry> idx1Entries;
+    try
+    {
+        idx1Entries.resize(entryCount);
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    if (!m_Reader.SeekTo(m_Idx1Offset))
+        return false;
+    if (!m_Reader.Read(idx1Entries.data(), idx1Bytes))
+        return false;
+
     for (auto &stream : m_Streams)
         stream.index.clear();
 
     // Build per-stream chunk id -> stream index lookup.
     // Pre-compute expected chunk ids for each stream.
-    struct ChunkIdMap { uint32_t chunkId; int streamIdx; };
     std::vector<ChunkIdMap> idMap;
     for (int i = 0; i < static_cast<int>(m_Streams.size()); ++i)
     {
@@ -619,63 +760,12 @@ bool AviDemuxer::BuildIdx1Index()
         }
     }
 
-    auto findStreamIndexByChunkId = [&idMap](uint32_t chunkId) -> int
-    {
-        for (const auto &m : idMap)
-        {
-            if (m.chunkId == chunkId)
-                return m.streamIdx;
-        }
-        return -1;
-    };
-
-    auto readIdx1Entry = [this](uint32_t index, avi::AviOldIndexEntry &e) -> bool
-    {
-        int64_t entryOffset = 0;
-        if (AddI64Overflow(m_Idx1Offset,
-                           static_cast<int64_t>(index) * static_cast<int64_t>(sizeof(avi::AviOldIndexEntry)),
-                           entryOffset))
-            return false;
-        return m_Reader.ReadAt(entryOffset, &e, sizeof(e));
-    };
-
-    auto isEntryOffsetValid = [this](const avi::AviOldIndexEntry &e, int64_t base) -> bool
-    {
-        const int64_t fileSize = m_Reader.FileSize();
-        if (base < 0 || base > fileSize)
-            return false;
-
-        int64_t dataOffset = 0;
-        if (AddI64Overflow(base, static_cast<int64_t>(e.dwOffset) + 8, dataOffset))
-            return false;
-        const int64_t headerOffset = dataOffset - 8;
-
-        if (headerOffset < 0 || dataOffset < 0)
-            return false;
-        if (headerOffset + 8 > fileSize)
-            return false;
-        if (dataOffset + static_cast<int64_t>(e.dwSize) > fileSize)
-            return false;
-
-        uint8_t hdr[8];
-        if (!m_Reader.ReadAt(headerOffset, hdr, sizeof(hdr)))
-            return false;
-
-        const uint32_t chunkId   = avi::ReadLe32(hdr + 0);
-        const uint32_t chunkSize = avi::ReadLe32(hdr + 4);
-        if (chunkId != e.dwChunkId)
-            return false;
-        if (chunkSize < e.dwSize)
-            return false;
-
-        return true;
-    };
-
     // Spec allows idx1 offsets to be absolute or relative to the first byte
     // of the 'movi' identifier.
     const int64_t moviIdOffset = (m_MoviDataOffset >= 4) ? (m_MoviDataOffset - 4) : 0;
     int64_t offsetBase = 0;
     bool haveMoviBase = moviIdOffset > 0;
+    const int64_t fileSize = m_Reader.FileSize();
 
     int absScore = 0;
     int moviScore = 0;
@@ -684,22 +774,19 @@ bool AviDemuxer::BuildIdx1Index()
 
     for (uint32_t n = 0; n < entryCount; ++n)
     {
-        avi::AviOldIndexEntry e;
-        if (!readIdx1Entry(n, e))
-            return false;
-
         if (sampled >= kMaxSamples)
-            continue;
+            break;
+        const avi::AviOldIndexEntry &e = idx1Entries[n];
         if (e.dwSize == 0)
             continue;
         if (e.dwSize > kMaxFramePayloadBytes)
             continue;
-        if (findStreamIndexByChunkId(e.dwChunkId) < 0)
+        if (FindStreamIndexByChunkId(idMap, e.dwChunkId) < 0)
             continue;
 
-        if (isEntryOffsetValid(e, 0))
+        if (IsIdx1EntryOffsetHeaderValid(m_Reader, e, 0, fileSize))
             ++absScore;
-        if (haveMoviBase && isEntryOffsetValid(e, moviIdOffset))
+        if (haveMoviBase && IsIdx1EntryOffsetHeaderValid(m_Reader, e, moviIdOffset, fileSize))
             ++moviScore;
         ++sampled;
     }
@@ -707,29 +794,33 @@ bool AviDemuxer::BuildIdx1Index()
     if (moviScore > absScore)
         offsetBase = moviIdOffset;
 
+    int strictValidated = 0;
+    const int kStrictValidationBudget = 64;
+
     for (uint32_t n = 0; n < entryCount; ++n)
     {
-        avi::AviOldIndexEntry e;
-        if (!readIdx1Entry(n, e))
-            return false;
+        const avi::AviOldIndexEntry &e = idx1Entries[n];
 
         if (e.dwSize == 0 || e.dwSize > kMaxFramePayloadBytes)
             continue;
 
         // Find stream index.
-        const int streamIdx = findStreamIndexByChunkId(e.dwChunkId);
+        const int streamIdx = FindStreamIndexByChunkId(idMap, e.dwChunkId);
         if (streamIdx < 0)
             continue;
 
-        int64_t resolvedBase = offsetBase;
-        if (!isEntryOffsetValid(e, resolvedBase))
+        int64_t resolvedBase = 0;
+        if (!ResolveIdx1EntryBaseByBounds(e, offsetBase, haveMoviBase, moviIdOffset, fileSize, resolvedBase))
+            continue;
+
+        if (strictValidated < kStrictValidationBudget)
         {
-            // Some damaged files mix both styles; try the alternate base per-entry.
-            const int64_t altBase = (resolvedBase == 0 && haveMoviBase) ? moviIdOffset : 0;
-            if (!isEntryOffsetValid(e, altBase))
+            if (!ResolveIdx1EntryBaseByHeader(m_Reader, e, resolvedBase, haveMoviBase, moviIdOffset,
+                                              fileSize, resolvedBase))
                 continue;
-            resolvedBase = altBase;
+            ++strictValidated;
         }
+
         if (m_Streams[streamIdx].index.size() >= kMaxFramesPerStream)
             return false;
 
@@ -769,8 +860,9 @@ bool AviDemuxer::BuildOpenDmlIndex()
     for (auto &stream : m_Streams)
     {
         stream.index.clear();
-        if (stream.superIndex.empty())
-            continue;
+
+        if (!stream.headerIndex.empty())
+            stream.index = stream.headerIndex;
 
         for (const auto &superEntry : stream.superIndex)
         {
@@ -800,7 +892,7 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
 {
     if (offset < 0 || offset > m_Reader.FileSize())
         return false;
-    if (chunkSize < 8 + sizeof(avi::AviStdIndexHeader))
+    if (chunkSize != 0 && chunkSize < sizeof(avi::AviStdIndexHeader))
         return false;
 
     uint8_t chunkHdr[8];
@@ -809,7 +901,8 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
 
     const uint32_t chunkId        = avi::ReadLe32(chunkHdr + 0);
     const uint32_t onDiskDataSize = avi::ReadLe32(chunkHdr + 4);
-    if ((chunkId & 0x0000FFFFu) != avi::MakeFourCC('i', 'x', 0, 0))
+    const bool isIxChunk = ((chunkId & 0x0000FFFFu) == avi::MakeFourCC('i', 'x', 0, 0));
+    if (!isIxChunk && chunkId != avi::kFourCC_indx)
         return false;
     if (onDiskDataSize < sizeof(avi::AviStdIndexHeader))
         return false;
@@ -819,7 +912,19 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
     if (onDiskTotalSize > fileRemaining)
         return false;
 
-    uint64_t boundedChunkSize = std::min<uint64_t>(chunkSize, onDiskTotalSize);
+    // Some writers store super-index dwSize as either RIFF cb or total chunk size.
+    // Treat the on-disk chunk header as authoritative and use dwSize as advisory.
+    const uint64_t advisorySize = static_cast<uint64_t>(chunkSize);
+    const uint64_t onDiskPaddedTotal = onDiskTotalSize + (onDiskDataSize & 1u);
+    if (advisorySize != 0 &&
+        advisorySize != static_cast<uint64_t>(onDiskDataSize) &&
+        advisorySize != onDiskTotalSize &&
+        advisorySize != onDiskPaddedTotal)
+    {
+        // Keep parsing; advisory size mismatch is tolerated for compatibility.
+    }
+
+    const uint64_t boundedChunkSize = onDiskTotalSize;
     if (boundedChunkSize < 8u + sizeof(avi::AviStdIndexHeader))
         return false;
 
@@ -893,4 +998,3 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
 
     return true;
 }
-

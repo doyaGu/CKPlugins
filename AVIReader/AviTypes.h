@@ -68,6 +68,7 @@ constexpr uint32_t kAVIIF_KEYFRAME = 0x00000010;
 // ---------------------------------------------------------------------------
 constexpr uint8_t kAVI_INDEX_OF_INDEXES = 0x00; // super-index
 constexpr uint8_t kAVI_INDEX_OF_CHUNKS  = 0x01; // standard index
+constexpr uint8_t kAVI_INDEX_2FIELD     = 0x01; // field-index subtype
 
 // ---------------------------------------------------------------------------
 // Portable AVI header structures (packed, little-endian on disk)

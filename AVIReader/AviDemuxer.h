@@ -84,6 +84,7 @@ private:
     {
         avi::AviStreamInfo info;
         std::vector<avi::FrameIndexEntry> index;
+        std::vector<avi::FrameIndexEntry> headerIndex;
 
         // OpenDML: super-index data captured during header parse.
         // Empty if the file uses classic idx1 instead.
@@ -115,7 +116,10 @@ private:
     /// Parse an audio 'strf' chunk into a WaveFormatHeader.
     bool ParseAudioFormat(const RiffReader::Chunk &chunk, avi::WaveFormatHeader &wfh);
 
-    /// Parse an 'indx' (super-index) chunk into the current stream entry.
+    /// Parse an 'indx' chunk into the current stream entry (super-index or standard index).
+    bool ParseStreamIndex(const RiffReader::Chunk &chunk, StreamEntry &stream);
+
+    /// Parse an OpenDML super-index 'indx' chunk into the current stream entry.
     bool ParseSuperIndex(const RiffReader::Chunk &chunk, StreamEntry &stream);
 
     /// Build the frame index. Tries OpenDML first, falls back to idx1.

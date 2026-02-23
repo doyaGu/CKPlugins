@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 
 // stb_image is compiled in StbImageImpl.cpp; we only need the declarations here.
 #include "stb_image.h"
@@ -9,9 +10,37 @@
 namespace
 {
 
-int AlignedStride(int width, int bpp)
+bool MulSizeOverflow(size_t a, size_t b, size_t &out)
 {
-    return ((width * bpp + 31) & ~31) / 8;
+    if (a != 0 && b > (std::numeric_limits<size_t>::max() / a))
+        return true;
+    out = a * b;
+    return false;
+}
+
+bool ComputeAlignedStride(int width, int bpp, size_t &outStride)
+{
+    if (width <= 0 || bpp <= 0)
+        return false;
+
+    size_t bits = 0;
+    if (MulSizeOverflow(static_cast<size_t>(width), static_cast<size_t>(bpp), bits))
+        return false;
+    if (bits > (std::numeric_limits<size_t>::max() - 31u))
+        return false;
+
+    outStride = ((bits + 31u) & ~static_cast<size_t>(31u)) / 8u;
+    return true;
+}
+
+bool HasValidOutputStride(int width, int outputStride)
+{
+    if (width <= 0 || outputStride <= 0)
+        return false;
+    size_t minStride = 0;
+    if (MulSizeOverflow(static_cast<size_t>(width), 4u, minStride))
+        return false;
+    return static_cast<size_t>(outputStride) >= minStride;
 }
 
 uint8_t ClampByte(int v)
@@ -183,16 +212,22 @@ bool RawFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 {
     if (!ValidArgs(data, output, width, height, outputStride))
         return false;
+    if (!HasValidOutputStride(width, outputStride))
+        return false;
 
-    const int srcStride = AlignedStride(width, m_SrcBpp);
-    const size_t neededSrc = static_cast<size_t>(srcStride) * static_cast<size_t>(height);
+    size_t srcStride = 0;
+    if (!ComputeAlignedStride(width, m_SrcBpp, srcStride))
+        return false;
+    size_t neededSrc = 0;
+    if (MulSizeOverflow(srcStride, static_cast<size_t>(height), neededSrc))
+        return false;
     if (dataSize < neededSrc)
         return false;
 
     for (int y = 0; y < height; ++y)
     {
         const int srcY = SourceRow(m_SrcTopDown, y, height);
-        const uint8_t *src = data + static_cast<size_t>(srcY) * static_cast<size_t>(srcStride);
+        const uint8_t *src = data + static_cast<size_t>(srcY) * srcStride;
         uint8_t *dst = output + static_cast<size_t>(y) * static_cast<size_t>(outputStride);
 
         if (m_SrcBpp == 32)
@@ -263,7 +298,9 @@ void DeltaFrameDecoder::Reset()
 
 size_t DeltaFrameDecoder::BeginFrame(uint8_t *output, int width, int height, int outputStride)
 {
-    const size_t frameBytes = static_cast<size_t>(outputStride) * static_cast<size_t>(height);
+    size_t frameBytes = 0;
+    if (MulSizeOverflow(static_cast<size_t>(outputStride), static_cast<size_t>(height), frameBytes))
+        return 0;
     if (m_Width != width || m_Height != height || m_PreviousFrame.size() != frameBytes)
     {
         m_Width = width;
@@ -285,6 +322,8 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                               uint8_t *output, int outputStride)
 {
     if (!ValidArgs(data, output, width, height, outputStride))
+        return false;
+    if (!HasValidOutputStride(width, outputStride))
         return false;
 
     const size_t frameBytes = BeginFrame(output, width, height, outputStride);
@@ -392,18 +431,24 @@ bool PackedYuv422FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 {
     if (!ValidArgs(data, output, width, height, outputStride))
         return false;
+    if (!HasValidOutputStride(width, outputStride))
+        return false;
     if (width & 1)
         return false;
 
-    const int srcStride = width * 2;
-    const size_t needed = static_cast<size_t>(srcStride) * static_cast<size_t>(height);
+    size_t srcStride = 0;
+    if (MulSizeOverflow(static_cast<size_t>(width), 2u, srcStride))
+        return false;
+    size_t needed = 0;
+    if (MulSizeOverflow(srcStride, static_cast<size_t>(height), needed))
+        return false;
     if (dataSize < needed)
         return false;
 
     for (int y = 0; y < height; ++y)
     {
         const int srcY = SourceRow(m_SrcTopDown, y, height);
-        const uint8_t *src = data + static_cast<size_t>(srcY) * static_cast<size_t>(srcStride);
+        const uint8_t *src = data + static_cast<size_t>(srcY) * srcStride;
         uint8_t *dst = output + static_cast<size_t>(y) * static_cast<size_t>(outputStride);
 
         for (int x = 0; x < width; x += 2)
@@ -449,6 +494,10 @@ bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 {
     if (!ValidArgs(data, output, width, height, outputStride))
         return false;
+    if (!HasValidOutputStride(width, outputStride))
+        return false;
+    if (dataSize > static_cast<size_t>(std::numeric_limits<int>::max()))
+        return false;
 
     // stb_image decodes JPEG data to top-down RGB (3 channels).
     int imgW = 0, imgH = 0, imgComp = 0;
@@ -466,11 +515,16 @@ bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
     }
 
     // Convert top-down RGB -> bottom-up 32bpp ARGB.
-    const int srcStride = imgW * 3;
+    size_t srcStride = 0;
+    if (MulSizeOverflow(static_cast<size_t>(imgW), 3u, srcStride))
+    {
+        stbi_image_free(pixels);
+        return false;
+    }
     for (int y = 0; y < height; ++y)
     {
         const int srcY = SourceRow(true, y, height);
-        const uint8_t *src = pixels + static_cast<size_t>(srcY) * static_cast<size_t>(srcStride);
+        const uint8_t *src = pixels + static_cast<size_t>(srcY) * srcStride;
         uint8_t *dst = output + static_cast<size_t>(y) * static_cast<size_t>(outputStride);
 
         for (int x = 0; x < width; ++x)
