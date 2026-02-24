@@ -50,8 +50,8 @@ PLUGIN_EXPORT int CKGetPluginInfoCount()
 
 PLUGIN_EXPORT CKPluginInfo *CKGetPluginInfo(int index)
 {
-    g_PluginInfo.m_Author = "Ballanced";
-    g_PluginInfo.m_Description = "Dependency-free AVI Movie Reader";
+    g_PluginInfo.m_Author = "Virtools";
+    g_PluginInfo.m_Description = "AVI Movie Reader";
     g_PluginInfo.m_Extension = "Avi";
     g_PluginInfo.m_Type = CKPLUGIN_MOVIE_READER;
     g_PluginInfo.m_Version = AVI_READER_VERSION;
