@@ -20,7 +20,7 @@
  * Supported input formats (via dr_wav):
  *   - PCM (8/16/24/32-bit)
  *   - IEEE float (32/64-bit)
- *   - A-law, µ-law
+ *   - A-law, u-law
  *   - Microsoft ADPCM, IMA ADPCM
  *
  * Output format:
