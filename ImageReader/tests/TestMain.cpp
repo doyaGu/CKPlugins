@@ -37,7 +37,7 @@ void mydeletearray(void* ptr) {
     free(ptr);
 }
 
-void* VxNewAligned(int size, int align) {
+void* VxNewAligned(size_t size, size_t align) {
     // Simple implementation - just allocate with extra space for alignment
     return _aligned_malloc(size, align);
 }
