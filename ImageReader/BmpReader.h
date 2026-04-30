@@ -48,6 +48,7 @@ private:
 //=============================================================================
 // Internal BMP file format structures
 //=============================================================================
+#ifndef _WINGDI_
 #pragma pack(push, 1)
 
 struct BITMAPFILEHEADER
@@ -85,8 +86,10 @@ struct BITMAPCOREHEADER
 };
 
 #pragma pack(pop)
+#endif
 
 // BMP compression types
+#ifndef BI_RGB
 #define BI_RGB 0       // Uncompressed
 #define BI_RLE8 1      // RLE 8-bit
 #define BI_RLE4 2      // RLE 4-bit
@@ -95,7 +98,10 @@ struct BITMAPCOREHEADER
 // (Used by BITMAPV4HEADER/BITMAPV5HEADER and some BI_BITFIELDS files)
 #define BI_JPEG 4           // JPEG image for printing (not a DIB pixel array)
 #define BI_PNG 5            // PNG image for printing (not a DIB pixel array)
+#endif
+#ifndef BI_ALPHABITFIELDS
 #define BI_ALPHABITFIELDS 6 // Bitfields with alpha channel mask
+#endif
 
 //=============================================================================
 // Internal helper functions (implemented in BmpReader.cpp)
