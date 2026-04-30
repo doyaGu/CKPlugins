@@ -223,19 +223,18 @@ CKERROR AVIReader::OpenFile(CKSTRING name)
 
     const int width = info->width;
     const int height = info->height;
-    if (width > std::numeric_limits<int>::max() / 4)
+    if (width > INT_MAX / 4)
     {
         ReleaseAll();
         return CKMOVIEERROR_UNSUPPORTEDFILE;
     }
     m_OutputStride = width * 4; // 32bpp, no padding needed
-    if (height > std::numeric_limits<int>::max() / m_OutputStride)
+    if (height > INT_MAX / m_OutputStride)
     {
         ReleaseAll();
         return CKMOVIEERROR_UNSUPPORTEDFILE;
     }
-    if (static_cast<size_t>(height) >
-        (std::numeric_limits<size_t>::max() / static_cast<size_t>(m_OutputStride)))
+    if (static_cast<size_t>(height) > (SIZE_MAX / static_cast<size_t>(m_OutputStride)))
     {
         ReleaseAll();
         return CKMOVIEERROR_UNSUPPORTEDFILE;
