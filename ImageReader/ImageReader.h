@@ -10,10 +10,15 @@
 #include <cstddef>
 #include <cstdint>
 
+#ifdef CK_LIB
+#define g_PluginInfo g_ImageReader_PluginInfo
+#endif
+
 #define READER_INDEX_BMP 0
 #define READER_INDEX_TGA 1
 #define READER_INDEX_PCX 2
 #define READER_COUNT 3
+
 extern CKPluginInfo g_PluginInfo[READER_COUNT];
 
 //=============================================================================

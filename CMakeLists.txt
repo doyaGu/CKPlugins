@@ -52,6 +52,7 @@ option(CKPLUGINS_BUILD_AVIREADER "Build AviReader plugin" ON)
 option(CKPLUGINS_BUILD_IMAGEREADER "Build ImageReader plugin" ON)
 option(CKPLUGINS_BUILD_WAVREADER "Build WavReader plugin" ON)
 option(CKPLUGINS_BUILD_VIRTOOLSLOADER "Build VirtoolsLoader plugin" ON)
+option(CKPLUGINS_BUILD_SHARED "Build shared libraries for plugins" ON)
 option(CKPLUGINS_BUILD_STATIC "Build static libraries for plugins" OFF)
 option(CKPLUGINS_BUILD_TESTS "Build unit tests" ${CKPLUGINS_IS_TOP_LEVEL})
 option(CKPLUGINS_INSTALL "Generate install target" ${CKPLUGINS_IS_TOP_LEVEL})
@@ -173,15 +174,17 @@ set(CKPLUGINS_COMPONENTS "")
 function(ckplugins_add_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LINKS" ${ARGN})
 
-    # Shared library (always built)
-    add_library(${TARGET_NAME} SHARED ${PLUGIN_SOURCES})
-    target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-    target_link_libraries(${TARGET_NAME} PRIVATE CK2 VxMath ${PLUGIN_LINKS})
-    set_target_properties(${TARGET_NAME} PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-            ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-    )
+    # Shared library
+    if (CKPLUGINS_BUILD_SHARED)
+        add_library(${TARGET_NAME} SHARED ${PLUGIN_SOURCES})
+        target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+        target_link_libraries(${TARGET_NAME} PRIVATE CK2 VxMath ${PLUGIN_LINKS})
+        set_target_properties(${TARGET_NAME} PROPERTIES
+                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+                LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+                ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+        )
+    endif ()
 
     # Static library (optional)
     if (CKPLUGINS_BUILD_STATIC)
@@ -199,10 +202,12 @@ function(ckplugins_add_plugin TARGET_NAME)
 
     # Installation
     if (CKPLUGINS_INSTALL)
-        install(TARGETS ${TARGET_NAME}
-                RUNTIME DESTINATION Plugins
-                LIBRARY DESTINATION Plugins
-        )
+        if (TARGET ${TARGET_NAME})
+            install(TARGETS ${TARGET_NAME}
+                    RUNTIME DESTINATION Plugins
+                    LIBRARY DESTINATION Plugins
+            )
+        endif ()
         if (TARGET ${TARGET_NAME}Static)
             install(TARGETS ${TARGET_NAME}Static
                     ARCHIVE DESTINATION lib
