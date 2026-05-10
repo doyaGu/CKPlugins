@@ -236,13 +236,13 @@ function(ckplugins_add_plugin TARGET_NAME)
     if (CKPLUGINS_INSTALL)
         if (TARGET ${TARGET_NAME})
             install(TARGETS ${TARGET_NAME}
-                    RUNTIME DESTINATION Plugins
-                    LIBRARY DESTINATION Plugins
+                    RUNTIME DESTINATION Plugins COMPONENT Runtime
+                    LIBRARY DESTINATION Plugins COMPONENT Runtime
             )
         endif ()
         if (TARGET ${TARGET_NAME}Static)
             install(TARGETS ${TARGET_NAME}Static
-                    ARCHIVE DESTINATION lib
+                    ARCHIVE DESTINATION lib COMPONENT Development
             )
         endif ()
     endif ()
