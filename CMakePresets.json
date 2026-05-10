@@ -1,0 +1,129 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/stage"
+      }
+    },
+    {
+      "name": "plugins-runtime-msvc-win32",
+      "inherits": "base",
+      "architecture": "Win32",
+      "cacheVariables": {
+        "CKPLUGINS_BUILD_SHARED": "ON",
+        "CKPLUGINS_BUILD_STATIC": "OFF",
+        "CKPLUGINS_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "plugins-runtime-msvc-x64",
+      "inherits": "base",
+      "architecture": "x64",
+      "cacheVariables": {
+        "CKPLUGINS_BUILD_SHARED": "ON",
+        "CKPLUGINS_BUILD_STATIC": "OFF",
+        "CKPLUGINS_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "plugins-static-msvc-win32",
+      "inherits": "base",
+      "architecture": "Win32",
+      "cacheVariables": {
+        "CKPLUGINS_BUILD_SHARED": "OFF",
+        "CKPLUGINS_BUILD_STATIC": "ON",
+        "CKPLUGINS_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "plugins-static-msvc-x64",
+      "inherits": "base",
+      "architecture": "x64",
+      "cacheVariables": {
+        "CKPLUGINS_BUILD_SHARED": "OFF",
+        "CKPLUGINS_BUILD_STATIC": "ON",
+        "CKPLUGINS_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "plugins-tests-msvc-win32",
+      "inherits": "base",
+      "architecture": "Win32",
+      "cacheVariables": {
+        "CKPLUGINS_BUILD_SHARED": "OFF",
+        "CKPLUGINS_BUILD_STATIC": "ON",
+        "CKPLUGINS_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "plugins-tests-msvc-x64",
+      "inherits": "base",
+      "architecture": "x64",
+      "cacheVariables": {
+        "CKPLUGINS_BUILD_SHARED": "OFF",
+        "CKPLUGINS_BUILD_STATIC": "ON",
+        "CKPLUGINS_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "plugins-runtime-win32-release",
+      "configurePreset": "plugins-runtime-msvc-win32",
+      "configuration": "Release"
+    },
+    {
+      "name": "plugins-runtime-x64-release",
+      "configurePreset": "plugins-runtime-msvc-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "plugins-static-win32-release",
+      "configurePreset": "plugins-static-msvc-win32",
+      "configuration": "Release"
+    },
+    {
+      "name": "plugins-static-x64-release",
+      "configurePreset": "plugins-static-msvc-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "plugins-tests-win32-release",
+      "configurePreset": "plugins-tests-msvc-win32",
+      "configuration": "Release"
+    },
+    {
+      "name": "plugins-tests-x64-release",
+      "configurePreset": "plugins-tests-msvc-x64",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "plugins-tests-win32-release",
+      "configurePreset": "plugins-tests-msvc-win32",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "plugins-tests-x64-release",
+      "configurePreset": "plugins-tests-msvc-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

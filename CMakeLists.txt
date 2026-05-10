@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.16)
 project(CKPlugins
         VERSION 2.1.0.14
         DESCRIPTION "Virtools Plugin Collection"
-        LANGUAGES CXX
+        LANGUAGES C CXX
 )
 
 # =============================================================================
@@ -102,6 +102,28 @@ endif ()
 # =============================================================================
 # Virtools SDK
 # =============================================================================
+if (NOT TARGET VxMath AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../VxMath/CMakeLists.txt")
+    if (CKPLUGINS_BUILD_STATIC AND NOT CKPLUGINS_BUILD_SHARED)
+        set(VXMATH_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+        set(VXMATH_BUILD_STATIC ON CACHE BOOL "" FORCE)
+    endif ()
+    if (CKPLUGINS_INSTALL)
+        set(VXMATH_INSTALL ON CACHE BOOL "Generate install target" FORCE)
+    endif ()
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../VxMath" "${CMAKE_CURRENT_BINARY_DIR}/VxMath")
+endif ()
+
+if (NOT TARGET CK2 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../CK2/CMakeLists.txt")
+    if (CKPLUGINS_BUILD_STATIC AND NOT CKPLUGINS_BUILD_SHARED)
+        set(CK2_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+        set(CK2_BUILD_STATIC ON CACHE BOOL "" FORCE)
+    endif ()
+    if (CKPLUGINS_INSTALL)
+        set(CK2_INSTALL ON CACHE BOOL "Generate install target" FORCE)
+    endif ()
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../CK2" "${CMAKE_CURRENT_BINARY_DIR}/CK2")
+endif ()
+
 if (NOT TARGET VxMath OR NOT TARGET CK2)
     set(VIRTOOLS_SDK_PATH "" CACHE PATH "Path to the Virtools SDK")
     option(VIRTOOLS_SDK_FETCH_FROM_GIT "Fetch Virtools SDK from git if not found" OFF)
@@ -194,7 +216,17 @@ function(ckplugins_add_plugin TARGET_NAME)
 
         add_library(${TARGET_NAME}Static STATIC ${STATIC_SOURCES})
         target_include_directories(${TARGET_NAME}Static PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-        target_link_libraries(${TARGET_NAME}Static PRIVATE CK2 VxMath ${PLUGIN_LINKS})
+
+        set(_ck2_dep CK2)
+        if (TARGET CK2Static)
+            set(_ck2_dep CK2Static)
+        endif ()
+        set(_vxmath_dep VxMath)
+        if (TARGET VxMathStatic)
+            set(_vxmath_dep VxMathStatic)
+        endif ()
+
+        target_link_libraries(${TARGET_NAME}Static PRIVATE ${_ck2_dep} ${_vxmath_dep} ${PLUGIN_LINKS})
         set_target_properties(${TARGET_NAME}Static PROPERTIES
                 ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
         )
