@@ -198,7 +198,19 @@ function(ckplugins_add_plugin TARGET_NAME)
 
     # Shared library
     if (CKPLUGINS_BUILD_SHARED)
-        add_library(${TARGET_NAME} SHARED ${PLUGIN_SOURCES})
+        set(_plugin_sources ${PLUGIN_SOURCES})
+        if (COMMAND ballance_configure_version_resource AND DEFINED BALLANCE_MODULE_VERSION_OVERRIDE)
+            list(FILTER _plugin_sources EXCLUDE REGEX "\\.rc$")
+            ballance_configure_version_resource(
+                    _plugin_version_resource
+                    ${TARGET_NAME}
+                    "${TARGET_NAME} Plugin"
+                    "${TARGET_NAME}.dll"
+            )
+            list(APPEND _plugin_sources "${_plugin_version_resource}")
+        endif ()
+
+        add_library(${TARGET_NAME} SHARED ${_plugin_sources})
         target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
         target_link_libraries(${TARGET_NAME} PRIVATE CK2 VxMath ${PLUGIN_LINKS})
         set_target_properties(${TARGET_NAME} PROPERTIES
