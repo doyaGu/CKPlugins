@@ -26,6 +26,7 @@ BEGIN
             VALUE "FileDescription", "@CKPLUGINS_RC_DESCRIPTION@"
             VALUE "FileVersion", "@CKPLUGINS_RC_VERSION_STRING@\0"
             VALUE "InternalName", "@CKPLUGINS_RC_TARGET@\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026\0"
             VALUE "OriginalFilename", "@CKPLUGINS_RC_ORIGINAL_FILENAME@\0"
             VALUE "ProductName", "Ballanced"
             VALUE "ProductVersion", "@CKPLUGINS_RC_VERSION_STRING@\0"
