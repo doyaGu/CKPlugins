@@ -193,15 +193,41 @@ set(CKPLUGINS_COMPONENTS "")
 # =============================================================================
 # Helper function for creating plugin targets
 # =============================================================================
+function(ckplugins_configure_version_resource OUT_VAR TARGET_NAME FILE_DESCRIPTION ORIGINAL_FILENAME)
+    if (NOT CKPLUGINS_VERSION_OVERRIDE MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$")
+        message(FATAL_ERROR "CKPLUGINS_VERSION_OVERRIDE must be a numeric four-part version")
+    endif ()
+
+    string(REPLACE "." ";" _ckplugins_version_parts "${CKPLUGINS_VERSION_OVERRIDE}")
+    list(GET _ckplugins_version_parts 0 CKPLUGINS_RC_VERSION_MAJOR)
+    list(GET _ckplugins_version_parts 1 CKPLUGINS_RC_VERSION_MINOR)
+    list(GET _ckplugins_version_parts 2 CKPLUGINS_RC_VERSION_PATCH)
+    list(GET _ckplugins_version_parts 3 CKPLUGINS_RC_VERSION_TWEAK)
+
+    set(CKPLUGINS_RC_VERSION_STRING "${CKPLUGINS_VERSION_OVERRIDE}")
+    set(CKPLUGINS_RC_TARGET "${TARGET_NAME}")
+    set(CKPLUGINS_RC_DESCRIPTION "${FILE_DESCRIPTION}")
+    set(CKPLUGINS_RC_ORIGINAL_FILENAME "${ORIGINAL_FILENAME}")
+    set(_ckplugins_version_resource "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}Version.generated.rc")
+
+    configure_file(
+            "${PROJECT_SOURCE_DIR}/Version.rc.in"
+            "${_ckplugins_version_resource}"
+            @ONLY
+    )
+
+    set(${OUT_VAR} "${_ckplugins_version_resource}" PARENT_SCOPE)
+endfunction()
+
 function(ckplugins_add_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LINKS" ${ARGN})
 
     # Shared library
     if (CKPLUGINS_BUILD_SHARED)
         set(_plugin_sources ${PLUGIN_SOURCES})
-        if (COMMAND ballance_configure_version_resource AND DEFINED BALLANCE_MODULE_VERSION_OVERRIDE)
+        if (DEFINED CKPLUGINS_VERSION_OVERRIDE)
             list(FILTER _plugin_sources EXCLUDE REGEX "\\.rc$")
-            ballance_configure_version_resource(
+            ckplugins_configure_version_resource(
                     _plugin_version_resource
                     ${TARGET_NAME}
                     "${TARGET_NAME} Plugin"
