@@ -33,10 +33,6 @@ if (CKPLUGINS_IS_TOP_LEVEL AND CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
     message(FATAL_ERROR "In-source builds not allowed. Run CMake from a separate directory: cmake -B build")
 endif ()
 
-if (NOT WIN32)
-    message(FATAL_ERROR "CKPlugins only supports Windows.")
-endif ()
-
 # =============================================================================
 # C++ standard
 # =============================================================================
@@ -56,6 +52,15 @@ option(CKPLUGINS_BUILD_SHARED "Build shared libraries for plugins" ON)
 option(CKPLUGINS_BUILD_STATIC "Build static libraries for plugins" OFF)
 option(CKPLUGINS_BUILD_TESTS "Build unit tests" ${CKPLUGINS_IS_TOP_LEVEL})
 option(CKPLUGINS_INSTALL "Generate install target" ${CKPLUGINS_IS_TOP_LEVEL})
+option(CKPLUGINS_ENABLE_SDL3 "Build portable SDL3-compatible plugins" OFF)
+
+if (NOT WIN32 AND NOT CKPLUGINS_ENABLE_SDL3)
+    message(FATAL_ERROR "CKPlugins only supports non-Windows builds with CKPLUGINS_ENABLE_SDL3=ON.")
+endif ()
+
+if (CKPLUGINS_ENABLE_SDL3 AND NOT WIN32)
+    set(CKPLUGINS_BUILD_AVIREADER OFF CACHE BOOL "Build AviReader plugin" FORCE)
+endif ()
 
 # =============================================================================
 # CMake modules
@@ -227,13 +232,15 @@ function(ckplugins_add_plugin TARGET_NAME)
         set(_plugin_sources ${PLUGIN_SOURCES})
         if (DEFINED CKPLUGINS_VERSION_OVERRIDE)
             list(FILTER _plugin_sources EXCLUDE REGEX "\\.rc$")
-            ckplugins_configure_version_resource(
-                    _plugin_version_resource
-                    ${TARGET_NAME}
-                    "${TARGET_NAME} Plugin"
-                    "${TARGET_NAME}.dll"
-            )
-            list(APPEND _plugin_sources "${_plugin_version_resource}")
+            if (WIN32)
+                ckplugins_configure_version_resource(
+                        _plugin_version_resource
+                        ${TARGET_NAME}
+                        "${TARGET_NAME} Plugin"
+                        "${TARGET_NAME}.dll"
+                )
+                list(APPEND _plugin_sources "${_plugin_version_resource}")
+            endif ()
         endif ()
 
         add_library(${TARGET_NAME} SHARED ${_plugin_sources})
