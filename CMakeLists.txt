@@ -53,10 +53,6 @@ option(CKPLUGINS_BUILD_STATIC "Build static libraries for plugins" OFF)
 option(CKPLUGINS_BUILD_TESTS "Build unit tests" ${CKPLUGINS_IS_TOP_LEVEL})
 option(CKPLUGINS_INSTALL "Generate install target" ${CKPLUGINS_IS_TOP_LEVEL})
 
-if (NOT WIN32)
-    set(CKPLUGINS_BUILD_AVIREADER OFF CACHE BOOL "Build AviReader plugin" FORCE)
-endif ()
-
 # =============================================================================
 # CMake modules
 # =============================================================================
