@@ -52,13 +52,8 @@ option(CKPLUGINS_BUILD_SHARED "Build shared libraries for plugins" ON)
 option(CKPLUGINS_BUILD_STATIC "Build static libraries for plugins" OFF)
 option(CKPLUGINS_BUILD_TESTS "Build unit tests" ${CKPLUGINS_IS_TOP_LEVEL})
 option(CKPLUGINS_INSTALL "Generate install target" ${CKPLUGINS_IS_TOP_LEVEL})
-option(CKPLUGINS_ENABLE_SDL3 "Build portable SDL3-compatible plugins" OFF)
 
-if (NOT WIN32 AND NOT CKPLUGINS_ENABLE_SDL3)
-    message(FATAL_ERROR "CKPlugins only supports non-Windows builds with CKPLUGINS_ENABLE_SDL3=ON.")
-endif ()
-
-if (CKPLUGINS_ENABLE_SDL3 AND NOT WIN32)
+if (NOT WIN32)
     set(CKPLUGINS_BUILD_AVIREADER OFF CACHE BOOL "Build AviReader plugin" FORCE)
 endif ()
 
