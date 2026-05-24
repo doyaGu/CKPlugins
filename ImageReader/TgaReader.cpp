@@ -254,6 +254,48 @@ static CKBOOL OutputHasAlpha(const TGAHEADER *hdr, CKDWORD depth, CKBOOL hasColo
     return depth == 32 || (depth == 16 && alphaBits > 0);
 }
 
+static CKBYTE SaveGray(CKBYTE b, CKBYTE g, CKBYTE r)
+{
+    return (CKBYTE)((r * 299 + g * 587 + b * 114) / 1000);
+}
+
+static CKWORD SaveRGB555(CKBYTE b, CKBYTE g, CKBYTE r)
+{
+    return (CKWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+}
+
+static void EncodeSavePixel(const CKBYTE *src, int bitDepth, CKBYTE *dst)
+{
+    if (bitDepth == 64)
+    {
+        dst[0] = SaveGray(src[0], src[1], src[2]);
+        return;
+    }
+
+    if (bitDepth == 16)
+    {
+        CKWORD pixel = SaveRGB555(src[0], src[1], src[2]);
+        dst[0] = (CKBYTE)(pixel & 0xFF);
+        dst[1] = (CKBYTE)(pixel >> 8);
+        return;
+    }
+
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    if (bitDepth == 32)
+        dst[3] = src[3];
+}
+
+static CKBOOL SavePixelsEqual(const CKBYTE *a, const CKBYTE *b, int bitDepth, CKDWORD dstBpp)
+{
+    CKBYTE encodedA[4];
+    CKBYTE encodedB[4];
+    EncodeSavePixel(a, bitDepth, encodedA);
+    EncodeSavePixel(b, bitDepth, encodedB);
+    return memcmp(encodedA, encodedB, dstBpp) == 0;
+}
+
 //=============================================================================
 // TGA Header Parsing
 //=============================================================================
@@ -632,18 +674,22 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
 
     if (width == 0 || height == 0)
         return 0;
-    if (bitDepth != 24 && bitDepth != 32)
+    if (bitDepth != 16 && bitDepth != 24 && bitDepth != 32 && bitDepth != 64)
         bitDepth = 24;
 
-    CKDWORD dstBpp = bitDepth / 8;
+    CKBOOL isGreyscale = (bitDepth == 64);
+    CKDWORD saveBitDepth = isGreyscale ? 8 : (CKDWORD)bitDepth;
+    CKDWORD dstBpp = isGreyscale ? 1 : (saveBitDepth / 8);
 
     // Build header
     TGAHEADER header;
     memset(&header, 0, sizeof(header));
-    header.imageType = useRLE ? TGA_TYPE_RLE_TRUECOLOR : TGA_TYPE_TRUECOLOR;
+    header.imageType = useRLE
+                           ? (isGreyscale ? TGA_TYPE_RLE_GRAYSCALE : TGA_TYPE_RLE_TRUECOLOR)
+                           : (isGreyscale ? TGA_TYPE_GRAYSCALE : TGA_TYPE_TRUECOLOR);
     header.width = (CKWORD)width;
     header.height = (CKWORD)height;
-    header.pixelDepth = (CKBYTE)bitDepth;
+    header.pixelDepth = (CKBYTE)saveBitDepth;
     header.imageDescriptor = (bitDepth == 32) ? 8 : 0;
 
     // Calculate sizes
@@ -676,9 +722,7 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
                 CKDWORD ny = height - 1 - ((runStart + rleCount) / width);
                 CKBYTE *nextPixel = srcPixels + ny * srcStride + nx * 4;
                 CKBOOL same = TRUE;
-                for (CKDWORD i = 0; i < dstBpp && same; i++)
-                    if (nextPixel[i] != startPixel[i])
-                        same = FALSE;
+                same = SavePixelsEqual(nextPixel, startPixel, bitDepth, dstBpp);
                 if (!same)
                     break;
                 rleCount++;
@@ -701,10 +745,7 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
                         CKDWORD nxx = (cs + sameCount) % width;
                         CKDWORD nyy = height - 1 - ((cs + sameCount) / width);
                         CKBYTE *np = srcPixels + nyy * srcStride + nxx * 4;
-                        CKBOOL same = TRUE;
-                        for (CKDWORD i = 0; i < dstBpp && same; i++)
-                            if (np[i] != cp[i])
-                                same = FALSE;
+                        CKBOOL same = SavePixelsEqual(np, cp, bitDepth, dstBpp);
                         if (!same)
                             break;
                         sameCount++;
@@ -717,9 +758,11 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
 
             if (rleCount >= 3)
             {
+                CKBYTE encoded[4];
+                EncodeSavePixel(startPixel, bitDepth, encoded);
                 buffer[writePos++] = (CKBYTE)(0x80 | (rleCount - 1));
                 for (CKDWORD i = 0; i < dstBpp; i++)
-                    buffer[writePos++] = startPixel[i];
+                    buffer[writePos++] = encoded[i];
                 pixelIndex += rleCount;
             }
             else
@@ -730,8 +773,10 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
                     CKDWORD px = (runStart + i) % width;
                     CKDWORD py = height - 1 - ((runStart + i) / width);
                     CKBYTE *p = srcPixels + py * srcStride + px * 4;
+                    CKBYTE encoded[4];
+                    EncodeSavePixel(p, bitDepth, encoded);
                     for (CKDWORD j = 0; j < dstBpp; j++)
-                        buffer[writePos++] = p[j];
+                        buffer[writePos++] = encoded[j];
                 }
                 pixelIndex += rawCount;
             }
@@ -745,8 +790,10 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
             CKBYTE *srcRow = srcPixels + srcY * srcStride;
             for (CKDWORD x = 0; x < width; x++)
             {
+                CKBYTE encoded[4];
+                EncodeSavePixel(srcRow + x * 4, bitDepth, encoded);
                 for (CKDWORD i = 0; i < dstBpp; i++)
-                    buffer[writePos++] = srcRow[x * 4 + i];
+                    buffer[writePos++] = encoded[i];
             }
         }
     }

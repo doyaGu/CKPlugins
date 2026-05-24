@@ -531,6 +531,11 @@ static CKBYTE ToGray(CKBYTE b, CKBYTE g, CKBYTE r)
     return (CKBYTE)((r * 299 + g * 587 + b * 114) / 1000);
 }
 
+static CKWORD PackRGB555(CKBYTE b, CKBYTE g, CKBYTE r)
+{
+    return (CKWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+}
+
 //=============================================================================
 // BmpReader Class Implementation
 //=============================================================================
@@ -798,7 +803,7 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
 
     if (width == 0 || height == 0)
         return 0;
-    if (bitDepth != 8 && bitDepth != 9 && bitDepth != 24 && bitDepth != 32)
+    if (bitDepth != 8 && bitDepth != 9 && bitDepth != 16 && bitDepth != 24 && bitDepth != 32)
         bitDepth = 24;
 
     CKBOOL useRle8 = (bitDepth == 9);
@@ -883,6 +888,15 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
             {
                 for (CKDWORD x = 0; x < width; x++)
                     dstRow[x] = ToGray(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
+            }
+            else if (headerBitDepth == 16)
+            {
+                for (CKDWORD x = 0; x < width; x++)
+                {
+                    CKWORD pixel = PackRGB555(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
+                    dstRow[x * 2 + 0] = (CKBYTE)(pixel & 0xFF);
+                    dstRow[x * 2 + 1] = (CKBYTE)(pixel >> 8);
+                }
             }
             else if (headerBitDepth == 24)
             {
