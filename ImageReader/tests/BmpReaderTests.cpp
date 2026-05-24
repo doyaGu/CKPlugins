@@ -926,6 +926,38 @@ TEST(BmpReader, SaveLoad_RGBA32_Roundtrip) {
     ImageReader::FreeBitmapData(props3);
 }
 
+TEST(BmpReader, SaveLoad_RGB16_Writes16BitBmp) {
+    std::string inputPath = getBmpTestImagePath("rgb24.bmp");
+    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+
+    BmpReader reader1;
+    CKBitmapProperties* props1 = nullptr;
+    int err = reader1.ReadFile(const_cast<char*>(inputPath.c_str()), &props1);
+    ASSERT_EQ(0, err);
+    ASSERT_TRUE(props1 != nullptr);
+    int origWidth = props1->m_Format.Width;
+    int origHeight = props1->m_Format.Height;
+
+    BmpBitmapProperties* bmpProps = static_cast<BmpBitmapProperties*>(props1);
+    bmpProps->m_BitDepth = 16;
+
+    std::string outputPath = joinPath(g_TestOutputDir, "roundtrip_rgb16.bmp");
+    BmpReader reader2;
+    err = reader2.SaveFile(const_cast<char*>(outputPath.c_str()), props1);
+    ASSERT_TRUE(err > 0);
+
+    ImageReader::FreeBitmapData(props1);
+
+    std::vector<uint8_t> data = readBinaryFile(outputPath);
+    ASSERT_TRUE(data.size() >= 54);
+    ASSERT_EQ(16, static_cast<int>(data[28] | (data[29] << 8)));
+
+    BmpTestResult result = readBmpFile(outputPath);
+    ASSERT_EQ(0, result.errorCode);
+    ASSERT_EQ(origWidth, result.width);
+    ASSERT_EQ(origHeight, result.height);
+}
+
 //=============================================================================
 // Additional Generated BMP Tests
 //=============================================================================

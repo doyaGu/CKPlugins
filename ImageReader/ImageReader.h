@@ -54,7 +54,7 @@ struct BmpBitmapProperties : public CKBitmapProperties
 };
 
 // TGA extended properties: 80 bytes total
-// Offset 72: m_BitDepth (24 or 32)
+// Offset 72: m_BitDepth (16, 24, 32, or 64=greyscale)
 // Offset 76: m_UseRLE (0 or 1)
 struct TgaBitmapProperties : public CKBitmapProperties
 {

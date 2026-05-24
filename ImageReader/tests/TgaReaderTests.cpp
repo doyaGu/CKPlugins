@@ -549,6 +549,134 @@ TEST(TgaReader, SaveLoad_32bit_RLE) {
     ImageReader::FreeBitmapData(props3);
 }
 
+TEST(TgaReader, SaveLoad_16bit_Writes16BitTga) {
+    std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
+    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+
+    TgaReader reader1;
+    CKBitmapProperties* props1 = nullptr;
+    int err = reader1.ReadFile(const_cast<char*>(inputPath.c_str()), &props1);
+    ASSERT_EQ(0, err);
+    ASSERT_TRUE(props1 != nullptr);
+    int origWidth = props1->m_Format.Width;
+    int origHeight = props1->m_Format.Height;
+
+    TgaBitmapProperties* tgaProps = static_cast<TgaBitmapProperties*>(props1);
+    tgaProps->m_BitDepth = 16;
+    tgaProps->m_UseRLE = 0;
+
+    std::string outputPath = joinPath(g_TestOutputDir, "roundtrip_tga16.tga");
+    TgaReader reader2;
+    err = reader2.SaveFile(const_cast<char*>(outputPath.c_str()), props1);
+    ASSERT_TRUE(err > 0);
+
+    ImageReader::FreeBitmapData(props1);
+
+    std::vector<uint8_t> data = readBinaryFile(outputPath);
+    ASSERT_TRUE(data.size() >= 18);
+    ASSERT_EQ(2, static_cast<int>(data[2]));
+    ASSERT_EQ(16, static_cast<int>(data[16]));
+
+    TgaTestResult result = readTgaFile(outputPath);
+    ASSERT_EQ(0, result.errorCode);
+    ASSERT_EQ(origWidth, result.width);
+    ASSERT_EQ(origHeight, result.height);
+}
+
+TEST(TgaReader, SaveLoad_Greyscale_WritesGreyscaleTga) {
+    std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
+    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+
+    TgaReader reader1;
+    CKBitmapProperties* props1 = nullptr;
+    int err = reader1.ReadFile(const_cast<char*>(inputPath.c_str()), &props1);
+    ASSERT_EQ(0, err);
+    ASSERT_TRUE(props1 != nullptr);
+    int origWidth = props1->m_Format.Width;
+    int origHeight = props1->m_Format.Height;
+
+    TgaBitmapProperties* tgaProps = static_cast<TgaBitmapProperties*>(props1);
+    tgaProps->m_BitDepth = 64;
+    tgaProps->m_UseRLE = 0;
+
+    std::string outputPath = joinPath(g_TestOutputDir, "roundtrip_tga_greyscale.tga");
+    TgaReader reader2;
+    err = reader2.SaveFile(const_cast<char*>(outputPath.c_str()), props1);
+    ASSERT_TRUE(err > 0);
+
+    ImageReader::FreeBitmapData(props1);
+
+    std::vector<uint8_t> data = readBinaryFile(outputPath);
+    ASSERT_TRUE(data.size() >= 18);
+    ASSERT_EQ(3, static_cast<int>(data[2]));
+    ASSERT_EQ(8, static_cast<int>(data[16]));
+
+    TgaTestResult result = readTgaFile(outputPath);
+    ASSERT_EQ(0, result.errorCode);
+    ASSERT_EQ(origWidth, result.width);
+    ASSERT_EQ(origHeight, result.height);
+}
+
+TEST(TgaReader, SaveLoad_16bit_RLE_Writes16BitTga) {
+    std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
+    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+
+    TgaReader reader1;
+    CKBitmapProperties* props1 = nullptr;
+    int err = reader1.ReadFile(const_cast<char*>(inputPath.c_str()), &props1);
+    ASSERT_EQ(0, err);
+    ASSERT_TRUE(props1 != nullptr);
+
+    TgaBitmapProperties* tgaProps = static_cast<TgaBitmapProperties*>(props1);
+    tgaProps->m_BitDepth = 16;
+    tgaProps->m_UseRLE = 1;
+
+    std::string outputPath = joinPath(g_TestOutputDir, "roundtrip_tga16_rle.tga");
+    TgaReader reader2;
+    err = reader2.SaveFile(const_cast<char*>(outputPath.c_str()), props1);
+    ASSERT_TRUE(err > 0);
+
+    ImageReader::FreeBitmapData(props1);
+
+    std::vector<uint8_t> data = readBinaryFile(outputPath);
+    ASSERT_TRUE(data.size() >= 18);
+    ASSERT_EQ(10, static_cast<int>(data[2]));
+    ASSERT_EQ(16, static_cast<int>(data[16]));
+
+    TgaTestResult result = readTgaFile(outputPath);
+    ASSERT_EQ(0, result.errorCode);
+}
+
+TEST(TgaReader, SaveLoad_Greyscale_RLE_WritesGreyscaleTga) {
+    std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
+    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+
+    TgaReader reader1;
+    CKBitmapProperties* props1 = nullptr;
+    int err = reader1.ReadFile(const_cast<char*>(inputPath.c_str()), &props1);
+    ASSERT_EQ(0, err);
+    ASSERT_TRUE(props1 != nullptr);
+
+    TgaBitmapProperties* tgaProps = static_cast<TgaBitmapProperties*>(props1);
+    tgaProps->m_BitDepth = 64;
+    tgaProps->m_UseRLE = 1;
+
+    std::string outputPath = joinPath(g_TestOutputDir, "roundtrip_tga_greyscale_rle.tga");
+    TgaReader reader2;
+    err = reader2.SaveFile(const_cast<char*>(outputPath.c_str()), props1);
+    ASSERT_TRUE(err > 0);
+
+    ImageReader::FreeBitmapData(props1);
+
+    std::vector<uint8_t> data = readBinaryFile(outputPath);
+    ASSERT_TRUE(data.size() >= 18);
+    ASSERT_EQ(11, static_cast<int>(data[2]));
+    ASSERT_EQ(8, static_cast<int>(data[16]));
+
+    TgaTestResult result = readTgaFile(outputPath);
+    ASSERT_EQ(0, result.errorCode);
+}
+
 //=============================================================================
 // API Tests
 //=============================================================================
