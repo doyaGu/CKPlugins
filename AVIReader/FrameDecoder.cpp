@@ -130,6 +130,17 @@ uint32_t ResolvePaletteEntry(const std::vector<uint32_t> &palette, uint8_t index
            index;
 }
 
+uint8_t ReadIndexedPixel(const uint8_t *src, int x, int bpp)
+{
+    if (bpp == 8)
+        return src[x];
+    if (bpp == 4)
+        return static_cast<uint8_t>((x & 1) ? (src[x >> 1] & 0x0Fu) : (src[x >> 1] >> 4));
+    if (bpp == 1)
+        return static_cast<uint8_t>((src[x >> 3] >> (7 - (x & 7))) & 1u);
+    return 0;
+}
+
 bool ValidArgs(const uint8_t *data, const uint8_t *output, int width, int height, int outputStride)
 {
     return data && output && width > 0 && height > 0 && outputStride > 0;
@@ -145,7 +156,8 @@ std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info
 {
     if (info.codec == avi::kCodec_RGB || info.codec == avi::kCodec_BITFIELDS)
     {
-        if (info.bitsPerPixel == 8 || info.bitsPerPixel == 16 ||
+        if (info.bitsPerPixel == 1 || info.bitsPerPixel == 4 ||
+            info.bitsPerPixel == 8 || info.bitsPerPixel == 16 ||
             info.bitsPerPixel == 24 || info.bitsPerPixel == 32)
             return std::make_unique<RawFrameDecoder>(info);
         return nullptr;
@@ -180,7 +192,7 @@ std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info
 }
 
 // ===========================================================================
-// RawFrameDecoder  (BI_RGB / BI_BITFIELDS, 8/16/24/32 bpp)
+// RawFrameDecoder  (BI_RGB / BI_BITFIELDS, 1/4/8/16/24/32 bpp)
 // ===========================================================================
 
 RawFrameDecoder::RawFrameDecoder(const avi::AviStreamInfo &info)
@@ -266,10 +278,10 @@ bool RawFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                 WriteBgra(dst, x, b, g, r, a);
             }
         }
-        else if (m_SrcBpp == 8)
+        else if (m_SrcBpp == 8 || m_SrcBpp == 4 || m_SrcBpp == 1)
         {
             for (int x = 0; x < width; ++x)
-                WriteArgb(&dst[x * 4], ResolvePaletteEntry(m_Palette, src[x]));
+                WriteArgb(&dst[x * 4], ResolvePaletteEntry(m_Palette, ReadIndexedPixel(src, x, m_SrcBpp)));
         }
         else
         {

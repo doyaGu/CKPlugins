@@ -220,6 +220,67 @@ TEST(RawFrameDecoder, Decode8bpp_PaletteIndex)
     EXPECT_EQ(dst[7], 0xFF); // A
 }
 
+TEST(RawFrameDecoder, Decode4bpp_PaletteNibbles)
+{
+    std::vector<uint32_t> palette(16, 0xFF000000u);
+    palette[1] = 0xFF0000FFu; // blue
+    palette[2] = 0xFF00FF00u; // green
+    palette[3] = 0xFFFF0000u; // red
+    palette[4] = 0xFFFFFFFFu; // white
+
+    auto info = MakeVideoStreamInfo(avi::kCodec_RGB, 4, 1, 4,
+                                     false, 0, 0, 0, 0, palette);
+    auto dec = CreateFrameDecoder(info);
+    ASSERT_NE(dec, nullptr);
+
+    int srcStride = AlignedStride(4, 4);
+    std::vector<uint8_t> src(srcStride, 0);
+    src[0] = 0x12;
+    src[1] = 0x34;
+
+    int dstStride = 16;
+    std::vector<uint8_t> dst(dstStride, 0);
+
+    EXPECT_TRUE(dec->Decode(src.data(), src.size(), 4, 1, dst.data(), dstStride));
+
+    EXPECT_EQ(dst[0], 0xFF);  // index 1 blue
+    EXPECT_EQ(dst[5], 0xFF);  // index 2 green
+    EXPECT_EQ(dst[10], 0xFF); // index 3 red
+    EXPECT_EQ(dst[12], 0xFF); // index 4 white B
+    EXPECT_EQ(dst[13], 0xFF); // index 4 white G
+    EXPECT_EQ(dst[14], 0xFF); // index 4 white R
+}
+
+TEST(RawFrameDecoder, Decode1bpp_PaletteBits)
+{
+    std::vector<uint32_t> palette(2, 0xFF000000u);
+    palette[0] = 0xFF000000u; // black
+    palette[1] = 0xFFFFFFFFu; // white
+
+    auto info = MakeVideoStreamInfo(avi::kCodec_RGB, 8, 1, 1,
+                                     false, 0, 0, 0, 0, palette);
+    auto dec = CreateFrameDecoder(info);
+    ASSERT_NE(dec, nullptr);
+
+    int srcStride = AlignedStride(8, 1);
+    std::vector<uint8_t> src(srcStride, 0);
+    src[0] = 0xA5; // 10100101, high bit first
+
+    int dstStride = 32;
+    std::vector<uint8_t> dst(dstStride, 0);
+
+    EXPECT_TRUE(dec->Decode(src.data(), src.size(), 8, 1, dst.data(), dstStride));
+
+    const uint8_t expected[] = {0xFF, 0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF};
+    for (int x = 0; x < 8; ++x)
+    {
+        EXPECT_EQ(dst[x * 4 + 0], expected[x]) << x;
+        EXPECT_EQ(dst[x * 4 + 1], expected[x]) << x;
+        EXPECT_EQ(dst[x * 4 + 2], expected[x]) << x;
+        EXPECT_EQ(dst[x * 4 + 3], 0xFF) << x;
+    }
+}
+
 // ===========================================================================
 // Top-down source (negative biHeight)
 // ===========================================================================
