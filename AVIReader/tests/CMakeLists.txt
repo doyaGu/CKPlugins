@@ -96,6 +96,11 @@ avireader_add_test(Rle8FrameDecoderTest
     EXTRA_SOURCES ${AVIREADER_COMMON_SOURCES}
 )
 
+avireader_add_test(Rle4FrameDecoderTest
+    SOURCES Rle4FrameDecoderTest.cpp
+    EXTRA_SOURCES ${AVIREADER_COMMON_SOURCES}
+)
+
 avireader_add_test(MjpegFrameDecoderTest
     SOURCES MjpegFrameDecoderTest.cpp
     EXTRA_SOURCES ${AVIREADER_COMMON_SOURCES}

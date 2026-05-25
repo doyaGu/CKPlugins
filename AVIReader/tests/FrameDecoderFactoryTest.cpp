@@ -134,11 +134,11 @@ TEST(FrameDecoderFactory, UnsupportedCodecReturnsNull)
     EXPECT_EQ(dec, nullptr);
 }
 
-TEST(FrameDecoderFactory, Rle4ReturnsNull)
+TEST(FrameDecoderFactory, Rle4ReturnsDecoder)
 {
     auto info = MakeVideoStreamInfo(avi::kCodec_RLE4, 4, 4, 4);
     auto dec = CreateFrameDecoder(info);
-    EXPECT_EQ(dec, nullptr);
+    EXPECT_NE(dec, nullptr);
 }
 
 TEST(FrameDecoderFactory, Rle8WrongBppReturnsNull)

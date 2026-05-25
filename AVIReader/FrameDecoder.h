@@ -126,6 +126,19 @@ private:
     std::vector<uint32_t> m_Palette;
 };
 
+/// Decodes BI_RLE4 streams (4bpp indexed) to 32bpp ARGB bottom-up.
+class Rle4FrameDecoder : public DeltaFrameDecoder
+{
+public:
+    explicit Rle4FrameDecoder(const avi::AviStreamInfo &info);
+
+    FRAMEDECODER_DECODE_OVERRIDE;
+
+private:
+    bool m_SrcTopDown;
+    std::vector<uint32_t> m_Palette;
+};
+
 /// Decodes packed YUV 4:2:2 streams (YUY2/UYVY) to 32bpp ARGB bottom-up.
 class PackedYuv422FrameDecoder : public IFrameDecoder
 {
