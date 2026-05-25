@@ -141,6 +141,16 @@ uint8_t ReadIndexedPixel(const uint8_t *src, int x, int bpp)
     return 0;
 }
 
+uint8_t HighNibble(uint8_t value)
+{
+    return static_cast<uint8_t>(value >> 4);
+}
+
+uint8_t LowNibble(uint8_t value)
+{
+    return static_cast<uint8_t>(value & 0x0Fu);
+}
+
 bool ValidArgs(const uint8_t *data, const uint8_t *output, int width, int height, int outputStride)
 {
     return data && output && width > 0 && height > 0 && outputStride > 0;
@@ -167,6 +177,13 @@ std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info
     {
         if (info.bitsPerPixel == 8)
             return std::make_unique<Rle8FrameDecoder>(info);
+        return nullptr;
+    }
+
+    if (info.codec == avi::kCodec_RLE4)
+    {
+        if (info.bitsPerPixel == 4)
+            return std::make_unique<Rle4FrameDecoder>(info);
         return nullptr;
     }
 
@@ -422,6 +439,110 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                     return false;
                 ++p; // pad byte
             }
+        }
+    }
+
+    CommitFrame(output, frameBytes);
+    return true;
+}
+
+// ===========================================================================
+// Rle4FrameDecoder  (BI_RLE4)
+// ===========================================================================
+
+Rle4FrameDecoder::Rle4FrameDecoder(const avi::AviStreamInfo &info)
+    : m_SrcTopDown(info.videoTopDown),
+      m_Palette(info.palette)
+{}
+
+bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
+                              int width, int height,
+                              uint8_t *output, int outputStride)
+{
+    if (!ValidArgs(data, output, width, height, outputStride))
+        return false;
+    if (!HasValidOutputStride(width, outputStride))
+        return false;
+
+    const size_t frameBytes = BeginFrame(output, width, height, outputStride);
+    if (frameBytes == 0)
+        return false;
+
+    auto putPixel = [&](int x, int y, uint8_t index) -> bool
+    {
+        if (x < 0 || x >= width || y < 0 || y >= height)
+            return false;
+        uint8_t *dst = output + static_cast<size_t>(y) * static_cast<size_t>(outputStride) + static_cast<size_t>(x) * 4;
+
+        WriteArgb(dst, ResolvePaletteEntry(m_Palette, index));
+        return true;
+    };
+
+    int x = 0;
+    int y = m_SrcTopDown ? (height - 1) : 0;
+    const int yStep = m_SrcTopDown ? -1 : 1;
+
+    const uint8_t *p = data;
+    const uint8_t *end = data + dataSize;
+
+    while (p < end)
+    {
+        if (end - p < 2)
+            return false;
+
+        const uint8_t count = *p++;
+        const uint8_t value = *p++;
+
+        if (count > 0)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                const uint8_t index = (i & 1) ? LowNibble(value) : HighNibble(value);
+                if (!putPixel(x, y, index))
+                    return false;
+                ++x;
+            }
+            continue;
+        }
+
+        if (value == 0)
+        {
+            x = 0;
+            y += yStep;
+            if (y < 0 || y >= height)
+                break;
+        }
+        else if (value == 1)
+        {
+            break;
+        }
+        else if (value == 2)
+        {
+            if (end - p < 2)
+                return false;
+            const uint8_t dx = *p++;
+            const uint8_t dy = *p++;
+            x += dx;
+            y += yStep * dy;
+            if (x < 0 || x >= width || y < 0 || y >= height)
+                return false;
+        }
+        else
+        {
+            const int n = value;
+            const int dataBytes = (n + 1) / 2;
+            const int paddedBytes = (dataBytes + 1) & ~1;
+            if (end - p < paddedBytes)
+                return false;
+            for (int i = 0; i < n; ++i)
+            {
+                const uint8_t packed = p[i >> 1];
+                const uint8_t index = (i & 1) ? LowNibble(packed) : HighNibble(packed);
+                if (!putPixel(x, y, index))
+                    return false;
+                ++x;
+            }
+            p += paddedBytes;
         }
     }
 
