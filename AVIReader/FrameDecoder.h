@@ -64,7 +64,7 @@ std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info
                 int width, int height, \
                 uint8_t *output, int outputStride) override
 
-/// Decodes uncompressed/bitfield DIB frames (8/16/24/32 bpp) to 32bpp ARGB bottom-up.
+/// Decodes uncompressed/bitfield DIB frames (1/4/8/16/24/32 bpp) to 32bpp ARGB bottom-up.
 class RawFrameDecoder : public IFrameDecoder
 {
 public:

@@ -42,6 +42,22 @@ TEST(FrameDecoderFactory, Rgb8ReturnsDecoder)
     EXPECT_NE(dec, nullptr);
 }
 
+TEST(FrameDecoderFactory, Rgb4ReturnsDecoder)
+{
+    auto info = MakeVideoStreamInfo(avi::kCodec_RGB, 4, 4, 4);
+    info.palette.resize(16, 0xFF000000u);
+    auto dec = CreateFrameDecoder(info);
+    EXPECT_NE(dec, nullptr);
+}
+
+TEST(FrameDecoderFactory, Rgb1ReturnsDecoder)
+{
+    auto info = MakeVideoStreamInfo(avi::kCodec_RGB, 4, 4, 1);
+    info.palette.resize(2, 0xFF000000u);
+    auto dec = CreateFrameDecoder(info);
+    EXPECT_NE(dec, nullptr);
+}
+
 TEST(FrameDecoderFactory, BitfieldsReturnsDecoder)
 {
     auto info = MakeVideoStreamInfo(avi::kCodec_BITFIELDS, 4, 4, 16,
@@ -142,8 +158,7 @@ TEST(FrameDecoderFactory, CramWrongBppReturnsNull)
 
 TEST(FrameDecoderFactory, RgbUnsupportedBppReturnsNull)
 {
-    // 4bpp RGB is not supported
-    auto info = MakeVideoStreamInfo(avi::kCodec_RGB, 4, 4, 4);
+    auto info = MakeVideoStreamInfo(avi::kCodec_RGB, 4, 4, 2);
     auto dec = CreateFrameDecoder(info);
     EXPECT_EQ(dec, nullptr);
 }
