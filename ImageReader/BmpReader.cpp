@@ -563,9 +563,9 @@ CKSTRING BmpReader::GetOptionDescription(int i)
 
 CKBOOL BmpReader::IsAlphaSaved(CKBitmapProperties *bp)
 {
-    if (!bp || bp->m_Size != 76)
+    if (!bp || bp->m_Size < sizeof(BmpBitmapProperties))
         return FALSE;
-    return ((CKDWORD *)bp)[18] == 32;
+    return static_cast<BmpBitmapProperties *>(bp)->m_BitDepth == 32;
 }
 
 int BmpReader::ReadFile(CKSTRING filename, CKBitmapProperties **bp)
@@ -731,7 +731,23 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
         return CKBITMAPERROR_FILECORRUPTED;
 
     XBYTE *dstPixels = new XBYTE[(CKDWORD)dstTotal];
-    memset(dstPixels, 0xFF, (CKDWORD)dstTotal);
+    if (hdr.compression == BI_RLE4 || hdr.compression == BI_RLE8)
+    {
+        // Sparse RLE streams can end early or move with delta escapes. Make
+        // every pixel they do not cover deterministic and match the standard
+        // reference decoders: opaque black rather than uninitialized memory.
+        for (CKDWORD pixel = 0; pixel < hdr.width * hdr.height; ++pixel)
+        {
+            dstPixels[pixel * 4 + 0] = 0;
+            dstPixels[pixel * 4 + 1] = 0;
+            dstPixels[pixel * 4 + 2] = 0;
+            dstPixels[pixel * 4 + 3] = 255;
+        }
+    }
+    else
+    {
+        memset(dstPixels, 0xFF, (CKDWORD)dstTotal);
+    }
 
     // Decode
     CKBOOL useMasks = (hdr.compression == BI_BITFIELDS || hdr.compression == BI_ALPHABITFIELDS);

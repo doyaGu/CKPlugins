@@ -444,9 +444,9 @@ CKSTRING TgaReader::GetOptionDescription(int i)
 
 CKBOOL TgaReader::IsAlphaSaved(CKBitmapProperties *bp)
 {
-    if (!bp || bp->m_Size != 80)
+    if (!bp || bp->m_Size < sizeof(TgaBitmapProperties))
         return FALSE;
-    return ((CKDWORD *)bp)[18] == 32;
+    return static_cast<TgaBitmapProperties *>(bp)->m_BitDepth == 32;
 }
 
 int TgaReader::ReadFile(CKSTRING filename, CKBitmapProperties **bp)
