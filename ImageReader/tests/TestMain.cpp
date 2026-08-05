@@ -38,12 +38,20 @@ void mydeletearray(void* ptr) {
 }
 
 void* VxNewAligned(size_t size, size_t align) {
-    // Simple implementation - just allocate with extra space for alignment
+#if defined(_WIN32)
     return _aligned_malloc(size, align);
+#else
+    void* ptr = nullptr;
+    return posix_memalign(&ptr, align, size) == 0 ? ptr : nullptr;
+#endif
 }
 
 void VxDeleteAligned(void* ptr) {
+#if defined(_WIN32)
     _aligned_free(ptr);
+#else
+    free(ptr);
+#endif
 }
 
 // Include the actual reader headers (they include Virtools SDK types)
@@ -384,8 +392,8 @@ bool getReferenceCrc(const std::string& key, uint32_t& outCrc) {
 //=============================================================================
 
 // Forward declaration of plugin initialization function
-extern "C" PLUGIN_EXPORT CKPluginInfo* CKGetPluginInfo(int index);
-extern "C" PLUGIN_EXPORT int CKGetPluginInfoCount();
+PLUGIN_EXPORT CKPluginInfo* CKGetPluginInfo(int index);
+PLUGIN_EXPORT int CKGetPluginInfoCount();
 
 int main(int argc, char* argv[]) {
     // Initialize plugin info (normally done by Virtools runtime when loading DLL)
