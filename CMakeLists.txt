@@ -143,7 +143,7 @@ if (NOT TARGET VxMath OR NOT TARGET CK2)
             FetchContent_Declare(
                     virtools_sdk
                     GIT_REPOSITORY https://github.com/doyaGu/Virtools-SDK-2.1.git
-                    GIT_TAG main
+                    GIT_TAG 175bcb12d829c687359b90615be53524cdba0132
             )
             message(STATUS "[CKPlugins] Downloading Virtools SDK")
             FetchContent_MakeAvailable(virtools_sdk)
@@ -235,6 +235,7 @@ function(ckplugins_add_plugin TARGET_NAME)
         endif ()
 
         add_library(${TARGET_NAME} SHARED ${_plugin_sources})
+        target_compile_features(${TARGET_NAME} PRIVATE cxx_std_17)
         target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
         target_link_libraries(${TARGET_NAME} PRIVATE CK2 VxMath ${PLUGIN_LINKS})
         set_target_properties(${TARGET_NAME} PROPERTIES
@@ -251,6 +252,7 @@ function(ckplugins_add_plugin TARGET_NAME)
         list(FILTER STATIC_SOURCES EXCLUDE REGEX "\\.rc$")
 
         add_library(${TARGET_NAME}Static STATIC ${STATIC_SOURCES})
+        target_compile_features(${TARGET_NAME}Static PRIVATE cxx_std_17)
         target_include_directories(${TARGET_NAME}Static PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
         set(_ck2_dep CK2)
