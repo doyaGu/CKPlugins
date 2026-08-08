@@ -1,64 +1,71 @@
 # CKPlugins
 
-A collection of Virtools plugins extending file format support for the Virtools 3D development platform.
+CKPlugins provides the file and media plugins used by the Virtools-compatible Ballanced runtime.
 
 ## Plugins
 
-### ImageReader
-Extends Virtools image reading capabilities with support for:
-- **BMP** - Windows Bitmap format (various bit depths and compression)
-- **PCX** - PC Paintbrush format
-- **TGA** - Truevision TGA format (including RLE compression)
+- **AVIReader**: RIFF/AVI demuxing and video-frame decoding, including RGB, RLE, MJPEG, Microsoft Video 1, and packed YUV paths
+- **ImageReader**: BMP, PCX, and TGA image loading
+- **WavReader**: WAV audio loading through dr_wav, including PCM, float, A-law, mu-law, and ADPCM formats
+- **VirtoolsLoader**: Virtools composition and object formats such as CMO, NMO, NMS, and VMO
 
-### WavReader
-WAV audio file reader using dr_wav library. Supports:
-- PCM (8/16/24/32-bit)
-- IEEE float (32/64-bit)
-- A-law, µ-law
-- Microsoft ADPCM, IMA ADPCM
+## Support scope
 
-### VirtoolsLoader
-Virtools composition loader for reading:
-- Virtools compositions (.cmo files)
-- Virtools objects (.nmo files)
-- Virtools scripts (.nms files)
-- Virtools player files (.vmo files)
+The instructions in this document describe CKPlugins' `sdl` branch. That branch is continuously built through [Ballanced](https://github.com/doyaGu/Ballanced) on Windows, Linux, and macOS. The Ballanced root presets define the supported full-runtime matrix.
+
+Standalone builds use this repository's generic CMake flow. Output names are platform-native: `.dll` on Windows, `.so` on Linux, and `.dylib` on macOS.
 
 ## Building
 
-**Requirements:**
-- Windows OS
-- Visual Studio
-- CMake 3.14+
-- Virtools SDK (set `VIRTOOLS_SDK_PATH` or enable `VIRTOOLS_SDK_FETCH_FROM_GIT`)
+### Recommended: Ballanced superproject
 
 ```bash
-# Create and configure build directory
-mkdir build
-cd build
-cmake ..
-
-# Build all plugins
-cmake --build . --config Release
+git clone --recurse-submodules https://github.com/doyaGu/Ballanced.git
+cd Ballanced
+cmake --preset linux-x64-runtime # choose the preset for your host
+cmake --build --preset linux-x64-runtime-stage-release
 ```
 
-Build outputs:
-- `ImageReader.dll` - Image format reader
-- `WavReader.dll` - WAV audio reader
-- `VirtoolsLoader.dll` - Virtools composition loader
+The staged modules are installed under `build/<preset>/stage/Plugins/`.
+
+### Standalone
+
+Requirements:
+
+- CMake 3.16+
+- A desktop C++ toolchain
+- CK2 and VxMath, preferably as adjacent `../CK2` and `../VxMath` checkouts
+- A Virtools SDK supplied with `VIRTOOLS_SDK_PATH`, or `VIRTOOLS_SDK_FETCH_FROM_GIT=ON`, when local CK2/VxMath projects are unavailable
+- Network access when test dependencies or the SDK must be fetched
+
+```bash
+cmake -S . -B build \
+  -DCKPLUGINS_BUILD_TESTS=ON \
+  -DVIRTOOLS_SDK_FETCH_FROM_GIT=ON
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+When building from a Ballanced source checkout, sibling CK2 and VxMath projects are detected automatically and the SDK-fetch option is unnecessary.
+
+### CMake options
+
+- `CKPLUGINS_BUILD_AVIREADER`
+- `CKPLUGINS_BUILD_IMAGEREADER`
+- `CKPLUGINS_BUILD_WAVREADER`
+- `CKPLUGINS_BUILD_VIRTOOLSLOADER`
+- `CKPLUGINS_BUILD_SHARED` / `CKPLUGINS_BUILD_STATIC`
+- `CKPLUGINS_BUILD_TESTS`
+- `CKPLUGINS_INSTALL`
 
 ## Testing
 
-Unit tests are available for ImageReader:
+The current standalone suite covers AVIReader and ImageReader. WavReader and VirtoolsLoader are built but do not currently have equivalent standalone regression suites.
 
-```bash
-# Build tests
-cmake --build . --config Release
+## Versioning
 
-# Run tests
-ctest --config Release
-```
+CKPlugins is versioned independently. Ballanced releases pin an exact plugin commit.
 
 ## License
 
-Apache License 2.0 - See [`LICENSE`](LICENSE) for details.
+Apache License 2.0. See [LICENSE](LICENSE).
