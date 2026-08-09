@@ -1095,8 +1095,14 @@ TEST(TgaReader, Negative_TruncatedPixelData) {
     std::vector<uint8_t> data = generateTgaUncompressed24(32, 32);
     data.resize(18 + 100);  // Header + partial pixels
     TgaTestResult result = readTgaMemory(data.data(), static_cast<int>(data.size()));
-    // Reader may either reject or partially decode - test for no crash
-    ASSERT_TRUE(result.errorCode != 0 || result.width == 32);
+    ASSERT_EQ(CKBITMAPERROR_FILECORRUPTED, result.errorCode);
+}
+
+TEST(TgaReader, Negative_PixelDataOneByteShort) {
+    std::vector<uint8_t> data = generateTgaUncompressed24(4, 4);
+    data.pop_back();
+    TgaTestResult result = readTgaMemory(data.data(), static_cast<int>(data.size()));
+    ASSERT_EQ(CKBITMAPERROR_FILECORRUPTED, result.errorCode);
 }
 
 TEST(TgaReader, Negative_TruncatedColormap) {

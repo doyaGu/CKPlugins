@@ -541,6 +541,15 @@ int TGA_Read(void *data, int size, CKBitmapProperties *props)
     src = NULL;
 
     CKDWORD pixelDataSize = (CKDWORD)srcPixels.Size();
+    CKDWORD uncompressedSrcStride = 0;
+    if (!ctx.isRLE)
+    {
+        CKDWORD requiredPixelDataSize = 0;
+        if (!SafeMul32(ctx.width, ctx.srcBytesPerPixel, uncompressedSrcStride) ||
+            !SafeMul32(uncompressedSrcStride, ctx.height, requiredPixelDataSize) ||
+            requiredPixelDataSize > pixelDataSize)
+            return CKBITMAPERROR_FILECORRUPTED;
+    }
 
     // Allocate destination
     CKDWORD dstStride = ctx.width * 4;
@@ -618,17 +627,10 @@ int TGA_Read(void *data, int size, CKBitmapProperties *props)
     }
     else
     {
-        CKDWORD srcStride;
-        if (!SafeMul32(ctx.width, ctx.srcBytesPerPixel, srcStride))
-        {
-            delete[] dstPixels;
-            return CKBITMAPERROR_FILECORRUPTED;
-        }
-
         for (CKDWORD fy = 0; fy < ctx.height; fy++)
         {
             CKDWORD dy = MapY(fy, ctx.height, ctx.isTopDown, ctx.interleaveMode);
-            CKBYTE *srcRow = srcPixels.Begin() + fy * srcStride;
+            CKBYTE *srcRow = srcPixels.Begin() + fy * uncompressedSrcStride;
 
             for (CKDWORD fx = 0; fx < ctx.width; fx++)
             {
