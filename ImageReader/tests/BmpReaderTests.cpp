@@ -15,6 +15,7 @@
 #include "TestFramework.h"
 #include "BmpReader.h"
 #include <cstring>
+#include <vector>
 
 using namespace TestFramework;
 
@@ -84,6 +85,39 @@ BmpTestResult readBmpMemory(const void* data, int size) {
     }
 
     return result;
+}
+
+void writeLe16(std::vector<CKBYTE>& bytes, size_t offset, CKWORD value) {
+    bytes[offset] = static_cast<CKBYTE>(value & 0xFFU);
+    bytes[offset + 1] = static_cast<CKBYTE>((value >> 8U) & 0xFFU);
+}
+
+void writeLe32(std::vector<CKBYTE>& bytes, size_t offset, CKDWORD value) {
+    bytes[offset] = static_cast<CKBYTE>(value & 0xFFU);
+    bytes[offset + 1] = static_cast<CKBYTE>((value >> 8U) & 0xFFU);
+    bytes[offset + 2] = static_cast<CKBYTE>((value >> 16U) & 0xFFU);
+    bytes[offset + 3] = static_cast<CKBYTE>((value >> 24U) & 0xFFU);
+}
+
+std::vector<CKBYTE> makeIndexedRleBmp(CKWORD bitCount, CKDWORD compression,
+                                      const std::vector<CKBYTE>& rleData) {
+    const CKDWORD paletteEntries = 1U << bitCount;
+    const CKDWORD pixelDataOffset = 14U + 40U + paletteEntries * 4U;
+    std::vector<CKBYTE> bytes(pixelDataOffset + rleData.size(), 0);
+
+    bytes[0] = 'B';
+    bytes[1] = 'M';
+    writeLe32(bytes, 2, static_cast<CKDWORD>(bytes.size()));
+    writeLe32(bytes, 10, pixelDataOffset);
+    writeLe32(bytes, 14, 40U);
+    writeLe32(bytes, 18, 4U);
+    writeLe32(bytes, 22, 1U);
+    writeLe16(bytes, 26, 1U);
+    writeLe16(bytes, 28, bitCount);
+    writeLe32(bytes, 30, compression);
+    writeLe32(bytes, 46, paletteEntries);
+    std::memcpy(bytes.data() + pixelDataOffset, rleData.data(), rleData.size());
+    return bytes;
 }
 
 std::string getBmpTestImagePath(const std::string& filename) {
@@ -677,6 +711,20 @@ TEST(BmpReader, Pal4_RLE_Transparency) {
     }
 }
 
+TEST(BmpReader, RejectsTruncatedRLE4AbsoluteRun) {
+    const std::vector<CKBYTE> bmp = makeIndexedRleBmp(4, BI_RLE4, {0, 4, 0x12});
+    const BmpTestResult result = readBmpMemory(bmp.data(), static_cast<int>(bmp.size()));
+
+    ASSERT_EQ(CKBITMAPERROR_FILECORRUPTED, result.errorCode);
+}
+
+TEST(BmpReader, RejectsTruncatedRLE8AbsoluteRun) {
+    const std::vector<CKBYTE> bmp = makeIndexedRleBmp(8, BI_RLE8, {0, 3, 1, 2});
+    const BmpTestResult result = readBmpMemory(bmp.data(), static_cast<int>(bmp.size()));
+
+    ASSERT_EQ(CKBITMAPERROR_FILECORRUPTED, result.errorCode);
+}
+
 //=============================================================================
 // Edge Cases
 //=============================================================================
@@ -836,8 +884,7 @@ TEST(BmpReader, Bad_UnusualExtendBufferUsage) {
     if (!fileExists(path)) SKIP_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
-    // May or may not be considered "bad" depending on implementation
-    ASSERT_TRUE(true); // Just verify no crash
+    ASSERT_EQ(CKBITMAPERROR_FILECORRUPTED, result.errorCode);
 }
 
 //=============================================================================

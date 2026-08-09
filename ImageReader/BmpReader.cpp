@@ -2,6 +2,8 @@
 
 #include "XArray.h"
 
+#include <limits>
+
 //=============================================================================
 // Data Source Abstraction - Unified file/memory reading
 //=============================================================================
@@ -86,7 +88,7 @@ public:
 
     CKBOOL Read(void *buffer, CKDWORD size) override
     {
-        if (m_offset + size > m_size)
+        if (m_offset > m_size || size > m_size - m_offset)
             return FALSE;
         memcpy(buffer, m_data + m_offset, size);
         m_offset += size;
@@ -101,19 +103,27 @@ public:
     }
     CKBOOL SeekRelative(int offset) override
     {
-        CKDWORD newOff = (offset < 0 && (CKDWORD)(-offset) > m_offset)
-                             ? 0
-                             : m_offset + offset;
-        if (newOff > m_size)
-            return FALSE;
-        m_offset = newOff;
+        if (offset < 0)
+        {
+            const unsigned long long distance = -(static_cast<long long>(offset));
+            if (distance > m_offset)
+                return FALSE;
+            m_offset -= static_cast<CKDWORD>(distance);
+        }
+        else
+        {
+            const CKDWORD distance = static_cast<CKDWORD>(offset);
+            if (m_offset > m_size || distance > m_size - m_offset)
+                return FALSE;
+            m_offset += distance;
+        }
         return TRUE;
     }
     CKDWORD Tell() const override { return m_offset; }
     CKDWORD Size() const override { return m_size; }
     CKBOOL ReadAt(CKDWORD offset, void *buffer, CKDWORD size) override
     {
-        if (offset + size > m_size)
+        if (offset > m_size || size > m_size - offset)
             return FALSE;
         memcpy(buffer, m_data + offset, size);
         return TRUE;
@@ -191,16 +201,38 @@ struct RLEContext
         else
             y = height;
     }
-    void Delta(CKBYTE dx, CKBYTE dy)
+    CKBOOL Delta(CKBYTE dx, CKBYTE dy)
     {
-        x += dx;
+        if (x > width || dx > width - x)
+            return FALSE;
+
         if (topDown)
+        {
+            if (y >= height || dy >= height - y)
+                return FALSE;
             y += dy;
+        }
         else
+        {
+            if (y >= height || dy > y)
+                return FALSE;
             y -= dy;
+        }
+        x += dx;
+        return TRUE;
     }
     CKBOOL HasMore() const { return srcPos < srcSize && y < height; }
-    CKBYTE ReadByte() { return (srcPos < srcSize) ? src[srcPos++] : 0; }
+    CKBOOL CanRead(CKDWORD count) const
+    {
+        return srcPos <= srcSize && count <= srcSize - srcPos;
+    }
+    CKBOOL TryReadByte(CKBYTE &value)
+    {
+        if (!CanRead(1))
+            return FALSE;
+        value = src[srcPos++];
+        return TRUE;
+    }
     void SetPixel(CKBYTE idx)
     {
         XBYTE *row = Row();
@@ -209,26 +241,36 @@ struct RLEContext
     }
 };
 
-static void DecodeRLE8(RLEContext &ctx)
+static CKBOOL DecodeRLE8(RLEContext &ctx)
 {
     while (ctx.HasMore())
     {
-        CKBYTE first = ctx.ReadByte();
-        CKBYTE second = ctx.ReadByte();
+        CKBYTE first = 0;
+        CKBYTE second = 0;
+        if (!ctx.TryReadByte(first) || !ctx.TryReadByte(second))
+            return FALSE;
+
         if (first == 0)
         {
             if (second == 0)
                 ctx.NextLine();
             else if (second == 1)
-                return;
+                return TRUE;
             else if (second == 2)
-                ctx.Delta(ctx.ReadByte(), ctx.ReadByte());
+            {
+                CKBYTE dx = 0;
+                CKBYTE dy = 0;
+                if (!ctx.TryReadByte(dx) || !ctx.TryReadByte(dy) || !ctx.Delta(dx, dy))
+                    return FALSE;
+            }
             else
             {
+                const CKDWORD dataSize = (static_cast<CKDWORD>(second) + 1U) & ~1U;
+                if (!ctx.CanRead(dataSize))
+                    return FALSE;
                 for (CKDWORD i = 0; i < second; i++)
-                    ctx.SetPixel(ctx.ReadByte());
-                if (second & 1)
-                    ctx.srcPos++;
+                    ctx.SetPixel(ctx.src[ctx.srcPos + i]);
+                ctx.srcPos += dataSize;
             }
         }
         else
@@ -237,34 +279,44 @@ static void DecodeRLE8(RLEContext &ctx)
                 ctx.SetPixel(second);
         }
     }
+    return TRUE;
 }
 
-static void DecodeRLE4(RLEContext &ctx)
+static CKBOOL DecodeRLE4(RLEContext &ctx)
 {
     while (ctx.HasMore())
     {
-        CKBYTE first = ctx.ReadByte();
-        CKBYTE second = ctx.ReadByte();
+        CKBYTE first = 0;
+        CKBYTE second = 0;
+        if (!ctx.TryReadByte(first) || !ctx.TryReadByte(second))
+            return FALSE;
+
         if (first == 0)
         {
             if (second == 0)
                 ctx.NextLine();
             else if (second == 1)
-                return;
+                return TRUE;
             else if (second == 2)
-                ctx.Delta(ctx.ReadByte(), ctx.ReadByte());
+            {
+                CKBYTE dx = 0;
+                CKBYTE dy = 0;
+                if (!ctx.TryReadByte(dx) || !ctx.TryReadByte(dy) || !ctx.Delta(dx, dy))
+                    return FALSE;
+            }
             else
             {
+                const CKDWORD packedSize = (static_cast<CKDWORD>(second) + 1U) / 2U;
+                const CKDWORD dataSize = (packedSize + 1U) & ~1U;
+                if (!ctx.CanRead(dataSize))
+                    return FALSE;
                 for (CKDWORD i = 0; i < second; i++)
                 {
-                    CKBYTE idx = ((i & 1) == 0) ? (ctx.src[ctx.srcPos] >> 4)
-                                                : (ctx.src[ctx.srcPos++] & 0x0F);
+                    const CKBYTE packed = ctx.src[ctx.srcPos + i / 2U];
+                    const CKBYTE idx = ((i & 1U) == 0) ? (packed >> 4) : (packed & 0x0F);
                     ctx.SetPixel(idx);
                 }
-                if (second & 1)
-                    ctx.srcPos++;
-                if (((second + 1) / 2) & 1)
-                    ctx.srcPos++;
+                ctx.srcPos += dataSize;
             }
         }
         else
@@ -274,6 +326,7 @@ static void DecodeRLE4(RLEContext &ctx)
                 ctx.SetPixel((i & 1) ? idx2 : idx1);
         }
     }
+    return TRUE;
 }
 
 //=============================================================================
@@ -364,13 +417,13 @@ struct BmpHeader
 {
     CKDWORD width, height;
     CKWORD bitCount, planes;
-    CKDWORD compression, colorsUsed, headerSize;
+    CKDWORD compression, colorsUsed, headerSize, imageSize;
     CKBOOL topDown;
     CKDWORD redMask, greenMask, blueMask, alphaMask;
     CKDWORD pixelDataOffset;
 
     BmpHeader() : width(0), height(0), bitCount(0), planes(0), compression(0),
-                  colorsUsed(0), headerSize(0), topDown(FALSE),
+                  colorsUsed(0), headerSize(0), imageSize(0), topDown(FALSE),
                   redMask(0), greenMask(0), blueMask(0), alphaMask(0), pixelDataOffset(0) {}
 };
 
@@ -400,13 +453,19 @@ static int ParseBmpHeader(BmpDataSource &src, BmpHeader &hdr)
     }
     else if (hdr.headerSize >= 40)
     {
-        BITMAPINFOHEADER info;
+        BITMAPINFOHEADER info = {};
         info.biSize = hdr.headerSize;
         CKDWORD toRead = (hdr.headerSize > sizeof(info)) ? sizeof(info) - 4 : hdr.headerSize - 4;
         if (!src.Read(&info.biWidth, toRead))
             return CKBITMAPERROR_READERROR;
         if (hdr.headerSize > sizeof(info))
-            src.SeekRelative((int)(hdr.headerSize - sizeof(info)));
+        {
+            const CKDWORD extraHeaderSize = hdr.headerSize - sizeof(info);
+            const CKDWORD position = src.Tell();
+            if (position > src.Size() || extraHeaderSize > src.Size() - position ||
+                !src.Seek(position + extraHeaderSize))
+                return CKBITMAPERROR_READERROR;
+        }
 
         hdr.width = info.biWidth;
         if ((int)info.biHeight < 0)
@@ -421,6 +480,7 @@ static int ParseBmpHeader(BmpDataSource &src, BmpHeader &hdr)
         hdr.bitCount = info.biBitCount;
         hdr.compression = info.biCompression;
         hdr.colorsUsed = info.biClrUsed;
+        hdr.imageSize = info.biSizeImage;
 
         if (hdr.compression == BI_JPEG || hdr.compression == BI_PNG)
             return CKBITMAPERROR_UNSUPPORTEDFILE;
@@ -433,11 +493,11 @@ static int ParseBmpHeader(BmpDataSource &src, BmpHeader &hdr)
         if ((hdr.compression == BI_BITFIELDS || hdr.compression == BI_ALPHABITFIELDS) && hdr.headerSize >= 52)
         {
             CKDWORD base = sizeof(BITMAPFILEHEADER) + 40;
-            src.ReadAt(base, &hdr.redMask, 4);
-            src.ReadAt(base + 4, &hdr.greenMask, 4);
-            src.ReadAt(base + 8, &hdr.blueMask, 4);
-            if (hdr.headerSize >= 56)
-                src.ReadAt(base + 12, &hdr.alphaMask, 4);
+            if (!src.ReadAt(base, &hdr.redMask, 4) ||
+                !src.ReadAt(base + 4, &hdr.greenMask, 4) ||
+                !src.ReadAt(base + 8, &hdr.blueMask, 4) ||
+                (hdr.headerSize >= 56 && !src.ReadAt(base + 12, &hdr.alphaMask, 4)))
+                return CKBITMAPERROR_READERROR;
         }
     }
     else
@@ -684,12 +744,12 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
     }
 
     // Validate and seek to pixel data
-    if (hdr.pixelDataOffset < src->Tell())
+    if (hdr.pixelDataOffset < src->Tell() || hdr.pixelDataOffset > src->Size() ||
+        !src->Seek(hdr.pixelDataOffset))
     {
         delete src;
         return CKBITMAPERROR_FILECORRUPTED;
     }
-    src->Seek(hdr.pixelDataOffset);
 
     // Calculate strides and sizes
     unsigned long long bitsPerRow = (unsigned long long)hdr.width * hdr.bitCount;
@@ -702,10 +762,11 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
     CKDWORD srcStride = (CKDWORD)srcStride64;
 
     CKDWORD pixelDataSize = 0;
+    const CKDWORD availablePixelData = src->Size() - src->Tell();
     if (hdr.compression == BI_RGB || hdr.compression == BI_BITFIELDS || hdr.compression == BI_ALPHABITFIELDS)
     {
         unsigned long long total = (unsigned long long)srcStride * hdr.height;
-        if (total > 0xFFFFFFFFULL)
+        if (total > 0xFFFFFFFFULL || total > availablePixelData)
         {
             delete src;
             return CKBITMAPERROR_FILECORRUPTED;
@@ -714,19 +775,37 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
     }
     else
     {
-        pixelDataSize = src->Size() - src->Tell();
+        if (hdr.imageSize > availablePixelData)
+        {
+            delete src;
+            return CKBITMAPERROR_FILECORRUPTED;
+        }
+        pixelDataSize = hdr.imageSize ? hdr.imageSize : availablePixelData;
+    }
+
+    if (pixelDataSize > static_cast<CKDWORD>(std::numeric_limits<int>::max()))
+    {
+        delete src;
+        return CKBITMAPERROR_FILECORRUPTED;
     }
 
     // Read pixel data
     XArray<XBYTE> srcPixels;
     srcPixels.Resize((int)pixelDataSize);
-    src->Read(srcPixels.Begin(), pixelDataSize);
+    if (pixelDataSize > 0 && !src->Read(srcPixels.Begin(), pixelDataSize))
+    {
+        delete src;
+        return CKBITMAPERROR_READERROR;
+    }
     delete src;
     src = NULL;
 
     // Allocate destination
-    CKDWORD dstStride = hdr.width * 4;
-    unsigned long long dstTotal = (unsigned long long)dstStride * hdr.height;
+    const unsigned long long dstStride64 = (unsigned long long)hdr.width * 4ULL;
+    if (dstStride64 > 0xFFFFFFFFULL)
+        return CKBITMAPERROR_FILECORRUPTED;
+    CKDWORD dstStride = static_cast<CKDWORD>(dstStride64);
+    unsigned long long dstTotal = dstStride64 * hdr.height;
     if (dstTotal > 0xFFFFFFFFULL)
         return CKBITMAPERROR_FILECORRUPTED;
 
@@ -757,14 +836,22 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
         RLEContext ctx(srcPixels.Begin(), pixelDataSize, dstPixels, dstStride,
                        hdr.width, hdr.height, hdr.topDown, palette.Begin(),
                        is3BytePalette, paletteEntries);
-        DecodeRLE8(ctx);
+        if (!DecodeRLE8(ctx))
+        {
+            delete[] dstPixels;
+            return CKBITMAPERROR_FILECORRUPTED;
+        }
     }
     else if (hdr.compression == BI_RLE4)
     {
         RLEContext ctx(srcPixels.Begin(), pixelDataSize, dstPixels, dstStride,
                        hdr.width, hdr.height, hdr.topDown, palette.Begin(),
                        is3BytePalette, paletteEntries);
-        DecodeRLE4(ctx);
+        if (!DecodeRLE4(ctx))
+        {
+            delete[] dstPixels;
+            return CKBITMAPERROR_FILECORRUPTED;
+        }
     }
     else
     {
