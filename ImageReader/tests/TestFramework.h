@@ -428,7 +428,8 @@ inline std::vector<uint8_t> readBinaryFile(const std::string& path) {
 
     if (size > 0) {
         data.resize(static_cast<size_t>(size));
-        fread(data.data(), 1, data.size(), f);
+        const size_t bytesRead = fread(data.data(), 1, data.size(), f);
+        if (bytesRead != data.size()) data.clear();
     }
     fclose(f);
     return data;
