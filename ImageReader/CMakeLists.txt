@@ -75,6 +75,9 @@ if ((CKPLUGINS_BUILD_TESTS OR BUILD_TESTS) AND BUILD_TESTING)
     endif ()
 
     target_compile_features(ImageReaderTests PRIVATE cxx_std_11)
+    set_target_properties(ImageReaderTests PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
     target_compile_definitions(ImageReaderTests PRIVATE
             TEST_IMAGES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/images"
             TEST_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/reference"
