@@ -38,6 +38,8 @@ public:
     virtual int ReadMemory(void *memory, int size, CKBitmapProperties **bp);
     virtual int SaveFile(CKSTRING filename, CKBitmapProperties *bp);
     virtual int SaveMemory(void **memory, CKBitmapProperties *bp);
+    virtual void GetBitmapDefaultProperties(CKBitmapProperties **bp);
+    virtual void SetBitmapDefaultProperties(CKBitmapProperties *bp);
 
 private:
     // Extended properties (76 bytes) stored inline

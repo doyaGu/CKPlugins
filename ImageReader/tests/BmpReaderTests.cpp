@@ -1554,6 +1554,15 @@ TEST(BmpReader, GetFlags) {
     ASSERT_EQ(15, flags);
 }
 
+TEST(BmpReader, ProvidesDefaultSaveProperties) {
+    BmpReader reader;
+    CKBitmapProperties* properties = nullptr;
+    reader.GetBitmapDefaultProperties(&properties);
+    ASSERT_TRUE(properties != nullptr);
+    ASSERT_EQ(sizeof(BmpBitmapProperties), properties->m_Size);
+    ASSERT_EQ(24, static_cast<BmpBitmapProperties*>(properties)->m_BitDepth);
+}
+
 TEST(BmpReader, MultipleInstancesIndependent) {
     BmpReader reader1;
     BmpReader reader2;

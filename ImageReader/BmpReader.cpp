@@ -670,6 +670,18 @@ int BmpReader::SaveMemory(void **memory, CKBitmapProperties *bp)
     return BMP_Save(memory, (CKBitmapProperties *)&local, depth);
 }
 
+void BmpReader::GetBitmapDefaultProperties(CKBitmapProperties **bp)
+{
+    if (bp)
+        *bp = &m_Properties;
+}
+
+void BmpReader::SetBitmapDefaultProperties(CKBitmapProperties *bp)
+{
+    if (bp && bp->m_Size >= sizeof(BmpBitmapProperties))
+        m_Properties.m_BitDepth = static_cast<BmpBitmapProperties *>(bp)->m_BitDepth;
+}
+
 //=============================================================================
 // BMP_Read - Core Reading Function
 //=============================================================================

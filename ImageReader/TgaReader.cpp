@@ -501,6 +501,21 @@ int TgaReader::SaveMemory(void **memory, CKBitmapProperties *bp)
     return TGA_Save(memory, (CKBitmapProperties *)&local, (int)local.m_BitDepth, (int)local.m_UseRLE);
 }
 
+void TgaReader::GetBitmapDefaultProperties(CKBitmapProperties **bp)
+{
+    if (bp)
+        *bp = &m_Properties;
+}
+
+void TgaReader::SetBitmapDefaultProperties(CKBitmapProperties *bp)
+{
+    if (!bp || bp->m_Size < sizeof(TgaBitmapProperties))
+        return;
+    TgaBitmapProperties *properties = static_cast<TgaBitmapProperties *>(bp);
+    m_Properties.m_BitDepth = properties->m_BitDepth;
+    m_Properties.m_UseRLE = properties->m_UseRLE;
+}
+
 //=============================================================================
 // TGA_Read - Core Reading Function
 //=============================================================================

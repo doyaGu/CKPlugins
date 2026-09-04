@@ -714,6 +714,17 @@ TEST(TgaReader, GetFlags) {
     ASSERT_EQ(15, flags);
 }
 
+TEST(TgaReader, ProvidesDefaultSaveProperties) {
+    TgaReader reader;
+    CKBitmapProperties* properties = nullptr;
+    reader.GetBitmapDefaultProperties(&properties);
+    ASSERT_TRUE(properties != nullptr);
+    ASSERT_EQ(sizeof(TgaBitmapProperties), properties->m_Size);
+    TgaBitmapProperties* tgaProperties = static_cast<TgaBitmapProperties*>(properties);
+    ASSERT_EQ(24, tgaProperties->m_BitDepth);
+    ASSERT_EQ(0, tgaProperties->m_UseRLE);
+}
+
 TEST(TgaReader, IsAlphaSaved_24bit) {
     TgaReader reader;
     TgaBitmapProperties props;
