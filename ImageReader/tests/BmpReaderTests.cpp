@@ -1582,6 +1582,27 @@ TEST(BmpReader, ProvidesDefaultSaveProperties) {
     ASSERT_EQ(24, static_cast<BmpBitmapProperties*>(properties)->m_BitDepth);
 }
 
+TEST(BmpReader, DefaultSavePropertiesIndependentOfReads) {
+    BmpReader reader;
+    BmpBitmapProperties wanted;
+    wanted.m_BitDepth = 32;
+    reader.SetBitmapDefaultProperties(&wanted);
+
+    const std::vector<CKBYTE> bmp = makeIndexedRleBmp(8, BI_RLE8, {4, 1, 0, 1});
+    CKBitmapProperties* read = nullptr;
+    ASSERT_EQ(0, reader.ReadMemory(const_cast<CKBYTE*>(bmp.data()), static_cast<int>(bmp.size()), &read));
+
+    CKBitmapProperties* defaults = nullptr;
+    reader.GetBitmapDefaultProperties(&defaults);
+    ASSERT_TRUE(defaults != nullptr);
+    ASSERT_TRUE(defaults != read);
+    ASSERT_TRUE(defaults->m_Data == nullptr);
+    ASSERT_TRUE(defaults->m_Format.Image == nullptr);
+    ASSERT_EQ(32, static_cast<BmpBitmapProperties*>(defaults)->m_BitDepth);
+
+    ImageReader::FreeBitmapData(read);
+}
+
 TEST(BmpReader, SaveUsesDataWhenFormatImageIsNull) {
     // CK2 save paths fill m_Format from GetImageDesc (Image = NULL) and pass
     // the surface through m_Data.

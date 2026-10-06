@@ -45,6 +45,8 @@ private:
     // Extended properties (80 bytes) stored inline
     // m_Size = 80, m_BitDepth at offset 72, m_UseRLE at offset 76
     TgaBitmapProperties m_Properties;
+    // Save defaults, kept apart from m_Properties so reads do not change them
+    TgaBitmapProperties m_DefaultProperties;
 };
 
 //=============================================================================

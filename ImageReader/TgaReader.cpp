@@ -409,6 +409,7 @@ static int ParseTgaHeader(TgaDataSource &src, TgaContext &ctx)
 TgaReader::TgaReader() : ImageReader()
 {
     m_Properties.Init(TGAREADER_GUID, "tga");
+    m_DefaultProperties.Init(TGAREADER_GUID, "tga");
 }
 
 TgaReader::~TgaReader()
@@ -494,7 +495,7 @@ int TgaReader::SaveMemory(void **memory, CKBitmapProperties *bp)
 void TgaReader::GetBitmapDefaultProperties(CKBitmapProperties **bp)
 {
     if (bp)
-        *bp = &m_Properties;
+        *bp = &m_DefaultProperties;
 }
 
 void TgaReader::SetBitmapDefaultProperties(CKBitmapProperties *bp)
@@ -502,8 +503,8 @@ void TgaReader::SetBitmapDefaultProperties(CKBitmapProperties *bp)
     if (!bp || bp->m_Size < sizeof(TgaBitmapProperties))
         return;
     TgaBitmapProperties *properties = static_cast<TgaBitmapProperties *>(bp);
-    m_Properties.m_BitDepth = properties->m_BitDepth;
-    m_Properties.m_UseRLE = properties->m_UseRLE;
+    m_DefaultProperties.m_BitDepth = properties->m_BitDepth;
+    m_DefaultProperties.m_UseRLE = properties->m_UseRLE;
 }
 
 //=============================================================================

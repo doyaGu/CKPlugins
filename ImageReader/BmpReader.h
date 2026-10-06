@@ -45,6 +45,8 @@ private:
     // Extended properties (76 bytes) stored inline
     // m_Size = 76, m_BitDepth at offset 72
     BmpBitmapProperties m_Properties;
+    // Save defaults, kept apart from m_Properties so reads do not change them
+    BmpBitmapProperties m_DefaultProperties;
 };
 
 //=============================================================================

@@ -725,6 +725,53 @@ TEST(TgaReader, ProvidesDefaultSaveProperties) {
     ASSERT_EQ(0, tgaProperties->m_UseRLE);
 }
 
+TEST(TgaReader, SaveUsesDataAndDefaultsSurviveReads) {
+    // CK2 save paths fill m_Format from GetImageDesc (Image = NULL) and pass
+    // the surface through m_Data.
+    CKBYTE pixels[2 * 2 * 4];
+    for (int i = 0; i < 4; ++i) {
+        pixels[i * 4 + 0] = static_cast<CKBYTE>(0x40 * i);
+        pixels[i * 4 + 1] = 0x11;
+        pixels[i * 4 + 2] = 0x22;
+        pixels[i * 4 + 3] = 0xFF;
+    }
+
+    TgaReader writer;
+    CKBitmapProperties* props = nullptr;
+    writer.GetBitmapDefaultProperties(&props);
+    ASSERT_TRUE(props != nullptr);
+    ImageReader::FillFormatBGRA32(props->m_Format, 2, 2, 2 * 4, nullptr);
+    props->m_Data = pixels;
+
+    void* memory = nullptr;
+    const int size = writer.SaveMemory(&memory, props);
+    props->m_Data = nullptr;
+    ASSERT_TRUE(size > 18);
+    ASSERT_TRUE(memory != nullptr);
+
+    TgaReader reader;
+    TgaBitmapProperties wanted;
+    wanted.m_BitDepth = 16;
+    wanted.m_UseRLE = 1;
+    reader.SetBitmapDefaultProperties(&wanted);
+
+    CKBitmapProperties* read = nullptr;
+    ASSERT_EQ(0, reader.ReadMemory(memory, size, &read));
+    ASSERT_TRUE(read != nullptr);
+    ASSERT_EQ(0, std::memcmp(read->m_Format.Image, pixels, sizeof(pixels)));
+
+    CKBitmapProperties* defaults = nullptr;
+    reader.GetBitmapDefaultProperties(&defaults);
+    ASSERT_TRUE(defaults != read);
+    ASSERT_TRUE(defaults->m_Data == nullptr);
+    TgaBitmapProperties* tgaDefaults = static_cast<TgaBitmapProperties*>(defaults);
+    ASSERT_EQ(16, tgaDefaults->m_BitDepth);
+    ASSERT_EQ(1, tgaDefaults->m_UseRLE);
+
+    ImageReader::FreeBitmapData(read);
+    writer.ReleaseMemory(memory);
+}
+
 TEST(TgaReader, IsAlphaSaved_24bit) {
     TgaReader reader;
     TgaBitmapProperties props;

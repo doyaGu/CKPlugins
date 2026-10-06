@@ -591,6 +591,7 @@ namespace RLE8
 BmpReader::BmpReader() : ImageReader()
 {
     m_Properties.Init(BMPREADER_GUID, "bmp");
+    m_DefaultProperties.Init(BMPREADER_GUID, "bmp");
 }
 
 BmpReader::~BmpReader()
@@ -662,13 +663,13 @@ int BmpReader::SaveMemory(void **memory, CKBitmapProperties *bp)
 void BmpReader::GetBitmapDefaultProperties(CKBitmapProperties **bp)
 {
     if (bp)
-        *bp = &m_Properties;
+        *bp = &m_DefaultProperties;
 }
 
 void BmpReader::SetBitmapDefaultProperties(CKBitmapProperties *bp)
 {
     if (bp && bp->m_Size >= sizeof(BmpBitmapProperties))
-        m_Properties.m_BitDepth = static_cast<BmpBitmapProperties *>(bp)->m_BitDepth;
+        m_DefaultProperties.m_BitDepth = static_cast<BmpBitmapProperties *>(bp)->m_BitDepth;
 }
 
 //=============================================================================
