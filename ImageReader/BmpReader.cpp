@@ -941,7 +941,7 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
     }
 
     CKDWORD fileSize = headerSize + pixelDataSize;
-    CKBYTE *buffer = new CKBYTE[fileSize];
+    CKBYTE *buffer = new CKBYTE[fileSize]();
 
     // File header
     BITMAPFILEHEADER *fh = (BITMAPFILEHEADER *)buffer;
