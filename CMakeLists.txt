@@ -314,29 +314,6 @@ if (CKPLUGINS_BUILD_VIRTOOLSLOADER)
 endif ()
 
 # =============================================================================
-# Installation
-# =============================================================================
-if (CKPLUGINS_INSTALL)
-    # Plugins are runtime components, no CMake targets export needed
-
-    # Plugins are runtime components, no CMake config needed
-
-    # CPack configuration
-    set(CPACK_PACKAGE_NAME "CKPlugins")
-    set(CPACK_PACKAGE_VENDOR "Virtools Community")
-    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Virtools Plugin Collection")
-    set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-    set(CPACK_PACKAGE_INSTALL_DIRECTORY "CKPlugins")
-    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-    set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
-    set(CPACK_GENERATOR "ZIP")
-    set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
-    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-win64")
-
-    include(CPack)
-endif ()
-
-# =============================================================================
 # Configuration summary
 # =============================================================================
 if (CKPLUGINS_IS_TOP_LEVEL)
