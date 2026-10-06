@@ -277,13 +277,12 @@ static void EncodeSavePixel(const CKBYTE *src, int bitDepth, CKBYTE *dst)
         dst[3] = src[3];
 }
 
-static CKBOOL SavePixelsEqual(const CKBYTE *a, const CKBYTE *b, int bitDepth, CKDWORD dstBpp)
+// Compares a source pixel against an already encoded one.
+static CKBOOL SavePixelMatches(const CKBYTE *src, const CKBYTE *encoded, int bitDepth, CKDWORD dstBpp)
 {
-    CKBYTE encodedA[4];
-    CKBYTE encodedB[4];
-    EncodeSavePixel(a, bitDepth, encodedA);
-    EncodeSavePixel(b, bitDepth, encodedB);
-    return memcmp(encodedA, encodedB, dstBpp) == 0;
+    CKBYTE srcEncoded[4];
+    EncodeSavePixel(src, bitDepth, srcEncoded);
+    return memcmp(srcEncoded, encoded, dstBpp) == 0;
 }
 
 //=============================================================================
@@ -721,6 +720,8 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
             CKDWORD runX = runStart % width;
             CKDWORD runY = height - 1 - (runStart / width);
             CKBYTE *startPixel = srcPixels + runY * srcStride + runX * 4;
+            CKBYTE startEncoded[4];
+            EncodeSavePixel(startPixel, bitDepth, startEncoded);
 
             // Find RLE run
             CKDWORD rleCount = 1;
@@ -729,9 +730,7 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
                 CKDWORD nx = (runStart + rleCount) % width;
                 CKDWORD ny = height - 1 - ((runStart + rleCount) / width);
                 CKBYTE *nextPixel = srcPixels + ny * srcStride + nx * 4;
-                CKBOOL same = TRUE;
-                same = SavePixelsEqual(nextPixel, startPixel, bitDepth, dstBpp);
-                if (!same)
+                if (!SavePixelMatches(nextPixel, startEncoded, bitDepth, dstBpp))
                     break;
                 rleCount++;
             }
@@ -746,6 +745,8 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
                     CKDWORD cx = cs % width;
                     CKDWORD cy = height - 1 - (cs / width);
                     CKBYTE *cp = srcPixels + cy * srcStride + cx * 4;
+                    CKBYTE cpEncoded[4];
+                    EncodeSavePixel(cp, bitDepth, cpEncoded);
 
                     CKDWORD sameCount = 1;
                     while (sameCount < 3 && (cs + sameCount) < totalPixels)
@@ -753,8 +754,7 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
                         CKDWORD nxx = (cs + sameCount) % width;
                         CKDWORD nyy = height - 1 - ((cs + sameCount) / width);
                         CKBYTE *np = srcPixels + nyy * srcStride + nxx * 4;
-                        CKBOOL same = SavePixelsEqual(np, cp, bitDepth, dstBpp);
-                        if (!same)
+                        if (!SavePixelMatches(np, cpEncoded, bitDepth, dstBpp))
                             break;
                         sameCount++;
                     }
@@ -766,11 +766,9 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
 
             if (rleCount >= 3)
             {
-                CKBYTE encoded[4];
-                EncodeSavePixel(startPixel, bitDepth, encoded);
                 buffer[writePos++] = (CKBYTE)(0x80 | (rleCount - 1));
                 for (CKDWORD i = 0; i < dstBpp; i++)
-                    buffer[writePos++] = encoded[i];
+                    buffer[writePos++] = startEncoded[i];
                 pixelIndex += rleCount;
             }
             else
