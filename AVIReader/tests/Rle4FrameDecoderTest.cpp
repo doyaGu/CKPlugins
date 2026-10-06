@@ -114,6 +114,33 @@ TEST(Rle4FrameDecoder, DeltaEscapeMovesWriteCursor)
     EXPECT_EQ(pixel[3], 0xFF);
 }
 
+TEST(Rle4FrameDecoder, OverhangingRunsAreClipped)
+{
+    auto pal = MakeGreyPalette();
+    auto info = MakeRle4Info(5, 2, pal);
+    auto dec = CreateFrameDecoder(info);
+    ASSERT_NE(dec, nullptr);
+
+    // Odd-width rows rounded up to whole bytes: a 6-pixel encoded run on
+    // row 0 and a 6-pixel absolute run on row 1.
+    std::vector<uint8_t> rle = {
+        0x06, 0x12,
+        0x00, 0x00,
+        0x00, 0x06, 0x34, 0x56, 0x70, 0x00,
+        0x00, 0x01
+    };
+
+    int stride = 5 * 4;
+    std::vector<uint8_t> dst(stride * 2, 0);
+
+    EXPECT_TRUE(dec->Decode(rle.data(), rle.size(), 5, 2, dst.data(), stride));
+
+    EXPECT_EQ(dst[0 * 4], 0x01);
+    EXPECT_EQ(dst[4 * 4], 0x01);
+    EXPECT_EQ(dst[stride + 0 * 4], 0x03);
+    EXPECT_EQ(dst[stride + 4 * 4], 0x07);
+}
+
 TEST(Rle4FrameDecoder, TruncatedAbsoluteRunReturnsFalse)
 {
     auto pal = MakeGreyPalette();

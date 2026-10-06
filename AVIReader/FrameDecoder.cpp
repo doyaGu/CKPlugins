@@ -493,9 +493,11 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
         const uint8_t count = *p++;
         const uint8_t value = *p++;
 
+        // Runs that overhang the row are clipped like the BMP RLE4 decoder
+        // does; encoders often round odd-width runs up to whole bytes.
         if (count > 0)
         {
-            for (int i = 0; i < count; ++i)
+            for (int i = 0; i < count && x < width; ++i)
             {
                 const uint8_t index = (i & 1) ? LowNibble(value) : HighNibble(value);
                 if (!putPixel(x, y, index))
@@ -534,7 +536,7 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
             const int paddedBytes = (dataBytes + 1) & ~1;
             if (end - p < paddedBytes)
                 return false;
-            for (int i = 0; i < n; ++i)
+            for (int i = 0; i < n && x < width; ++i)
             {
                 const uint8_t packed = p[i >> 1];
                 const uint8_t index = (i & 1) ? LowNibble(packed) : HighNibble(packed);
