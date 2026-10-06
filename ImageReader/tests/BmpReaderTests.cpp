@@ -1582,6 +1582,42 @@ TEST(BmpReader, ProvidesDefaultSaveProperties) {
     ASSERT_EQ(24, static_cast<BmpBitmapProperties*>(properties)->m_BitDepth);
 }
 
+TEST(BmpReader, SaveUsesDataWhenFormatImageIsNull) {
+    // CK2 save paths fill m_Format from GetImageDesc (Image = NULL) and pass
+    // the surface through m_Data.
+    CKBYTE pixels[3 * 2 * 4];
+    for (int i = 0; i < 6; ++i) {
+        pixels[i * 4 + 0] = static_cast<CKBYTE>(0x10 * i);
+        pixels[i * 4 + 1] = 0x20;
+        pixels[i * 4 + 2] = 0x30;
+        pixels[i * 4 + 3] = 0xFF;
+    }
+
+    BmpReader reader;
+    CKBitmapProperties* props = nullptr;
+    reader.GetBitmapDefaultProperties(&props);
+    ASSERT_TRUE(props != nullptr);
+    ImageReader::FillFormatBGRA32(props->m_Format, 3, 2, 3 * 4, nullptr);
+    props->m_Data = pixels;
+    static_cast<BmpBitmapProperties*>(props)->m_BitDepth = 16;
+
+    void* memory = nullptr;
+    const int size = reader.SaveMemory(&memory, props);
+    props->m_Data = nullptr;
+    ASSERT_EQ(54 + 2 * 8, size);
+    ASSERT_TRUE(memory != nullptr);
+
+    // 3 pixels at 16 bpp fill 6 of each row's 8 bytes; the padding is zeroed.
+    const CKBYTE* bytes = static_cast<const CKBYTE*>(memory);
+    ASSERT_EQ(0, bytes[54 + 6]);
+    ASSERT_EQ(0, bytes[54 + 7]);
+    ASSERT_EQ(0, bytes[54 + 14]);
+    ASSERT_EQ(0, bytes[54 + 15]);
+    ASSERT_TRUE(bytes[54 + 2] != 0 || bytes[54 + 3] != 0);
+
+    reader.ReleaseMemory(memory);
+}
+
 TEST(BmpReader, MultipleInstancesIndependent) {
     BmpReader reader1;
     BmpReader reader2;

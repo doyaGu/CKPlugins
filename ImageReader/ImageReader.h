@@ -182,6 +182,15 @@ public:
         fmt.Image = image;
     }
 
+    // Pixels to save. CK2 save paths built from GetImageDesc() leave
+    // m_Format.Image null and pass the surface through m_Data instead.
+    static CKBYTE *GetSavePixels(CKBitmapProperties *bp)
+    {
+        if (bp->m_Format.Image)
+            return bp->m_Format.Image;
+        return static_cast<CKBYTE *>(bp->m_Data);
+    }
+
     // Shared save-side pixel conversions.
     static CKBYTE ToGray(CKBYTE b, CKBYTE g, CKBYTE r)
     {

@@ -671,15 +671,15 @@ int TGA_Read(void *data, int size, CKBitmapProperties *props)
 //=============================================================================
 int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useRLE)
 {
-    if (!props || !props->m_Format.Image)
+    if (!props)
         return 0;
 
     CKDWORD width = props->m_Format.Width;
     CKDWORD height = props->m_Format.Height;
-    CKBYTE *srcPixels = props->m_Format.Image;
+    CKBYTE *srcPixels = ImageReader::GetSavePixels(props);
     CKDWORD srcStride = props->m_Format.BytesPerLine;
 
-    if (width == 0 || height == 0)
+    if (!srcPixels || width == 0 || height == 0)
         return 0;
     if (bitDepth != 16 && bitDepth != 24 && bitDepth != 32 && bitDepth != 64)
         bitDepth = 24;
