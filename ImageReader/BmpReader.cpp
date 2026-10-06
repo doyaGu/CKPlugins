@@ -206,18 +206,17 @@ struct RLEContext
         if (x > width || dx > width - x)
             return FALSE;
 
-        if (topDown)
+        if (y >= height)
+            return FALSE;
+
+        // A delta that leaves the image skips every remaining row, which
+        // ends decoding just like running past the last line.
+        if (topDown ? (dy >= height - y) : (dy > y))
         {
-            if (y >= height || dy >= height - y)
-                return FALSE;
-            y += dy;
+            y = height;
+            return TRUE;
         }
-        else
-        {
-            if (y >= height || dy > y)
-                return FALSE;
-            y -= dy;
-        }
+        y = topDown ? y + dy : y - dy;
         x += dx;
         return TRUE;
     }

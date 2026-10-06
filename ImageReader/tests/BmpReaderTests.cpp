@@ -736,6 +736,14 @@ TEST(BmpReader, RLEIgnoresOversizedImageSize) {
     ASSERT_EQ(1, result.height);
 }
 
+TEST(BmpReader, RLEDeltaPastLastRowEndsImage) {
+    const std::vector<CKBYTE> bmp = makeIndexedRleBmp(8, BI_RLE8, {2, 1, 0, 2, 0, 1, 0, 1});
+    const BmpTestResult result = readBmpMemory(bmp.data(), static_cast<int>(bmp.size()));
+
+    ASSERT_EQ(0, result.errorCode);
+    ASSERT_EQ(4, result.width);
+}
+
 //=============================================================================
 // Edge Cases
 //=============================================================================
