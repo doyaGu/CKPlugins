@@ -254,27 +254,17 @@ static CKBOOL OutputHasAlpha(const TGAHEADER *hdr, CKDWORD depth, CKBOOL hasColo
     return depth == 32 || (depth == 16 && alphaBits > 0);
 }
 
-static CKBYTE SaveGray(CKBYTE b, CKBYTE g, CKBYTE r)
-{
-    return (CKBYTE)((r * 299 + g * 587 + b * 114) / 1000);
-}
-
-static CKWORD SaveRGB555(CKBYTE b, CKBYTE g, CKBYTE r)
-{
-    return (CKWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
-}
-
 static void EncodeSavePixel(const CKBYTE *src, int bitDepth, CKBYTE *dst)
 {
     if (bitDepth == 64)
     {
-        dst[0] = SaveGray(src[0], src[1], src[2]);
+        dst[0] = ImageReader::ToGray(src[0], src[1], src[2]);
         return;
     }
 
     if (bitDepth == 16)
     {
-        CKWORD pixel = SaveRGB555(src[0], src[1], src[2]);
+        CKWORD pixel = ImageReader::PackRGB555(src[0], src[1], src[2]);
         dst[0] = (CKBYTE)(pixel & 0xFF);
         dst[1] = (CKBYTE)(pixel >> 8);
         return;

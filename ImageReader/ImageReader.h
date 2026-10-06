@@ -182,6 +182,17 @@ public:
         fmt.Image = image;
     }
 
+    // Shared save-side pixel conversions.
+    static CKBYTE ToGray(CKBYTE b, CKBYTE g, CKBYTE r)
+    {
+        return (CKBYTE)((r * 299 + g * 587 + b * 114) / 1000);
+    }
+
+    static CKWORD PackRGB555(CKBYTE b, CKBYTE g, CKBYTE r)
+    {
+        return (CKWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+    }
+
     // Free image data associated with properties.
     // Ownership rules (mirroring original behavior):
     // - If m_Data is non-null, it owns the allocation backing the image (and potentially other sub-pointers).

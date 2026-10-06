@@ -586,16 +586,6 @@ namespace RLE8
     }
 }
 
-static CKBYTE ToGray(CKBYTE b, CKBYTE g, CKBYTE r)
-{
-    return (CKBYTE)((r * 299 + g * 587 + b * 114) / 1000);
-}
-
-static CKWORD PackRGB555(CKBYTE b, CKBYTE g, CKBYTE r)
-{
-    return (CKWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
-}
-
 //=============================================================================
 // BmpReader Class Implementation
 //=============================================================================
@@ -940,7 +930,7 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
         {
             CKBYTE *srcRow = srcPixels + (height - 1 - y) * srcStride;
             for (CKDWORD x = 0; x < width; x++)
-                row.Begin()[x] = ToGray(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
+                row.Begin()[x] = ImageReader::ToGray(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
             RLE8::EncodeRow(row.Begin(), width, rleData);
             RLE8::EmitEOL(rleData);
         }
@@ -1002,13 +992,13 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
             if (headerBitDepth == 8)
             {
                 for (CKDWORD x = 0; x < width; x++)
-                    dstRow[x] = ToGray(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
+                    dstRow[x] = ImageReader::ToGray(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
             }
             else if (headerBitDepth == 16)
             {
                 for (CKDWORD x = 0; x < width; x++)
                 {
-                    CKWORD pixel = PackRGB555(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
+                    CKWORD pixel = ImageReader::PackRGB555(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
                     dstRow[x * 2 + 0] = (CKBYTE)(pixel & 0xFF);
                     dstRow[x * 2 + 1] = (CKBYTE)(pixel >> 8);
                 }
