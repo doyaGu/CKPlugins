@@ -777,12 +777,11 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
     }
     else
     {
-        if (hdr.imageSize > availablePixelData)
-        {
-            delete src;
-            return CKBITMAPERROR_FILECORRUPTED;
-        }
-        pixelDataSize = hdr.imageSize ? hdr.imageSize : availablePixelData;
+        // Some writers store the uncompressed size in biSizeImage for RLE
+        // data, so only trust it when it fits in the remaining bytes.
+        pixelDataSize = (hdr.imageSize && hdr.imageSize <= availablePixelData)
+                            ? hdr.imageSize
+                            : availablePixelData;
     }
 
     if (pixelDataSize > static_cast<CKDWORD>(std::numeric_limits<int>::max()))

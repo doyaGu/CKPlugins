@@ -725,6 +725,17 @@ TEST(BmpReader, RejectsTruncatedRLE8AbsoluteRun) {
     ASSERT_EQ(CKBITMAPERROR_FILECORRUPTED, result.errorCode);
 }
 
+TEST(BmpReader, RLEIgnoresOversizedImageSize) {
+    // Some writers store the uncompressed size in biSizeImage for RLE data.
+    std::vector<CKBYTE> bmp = makeIndexedRleBmp(8, BI_RLE8, {4, 1, 0, 1});
+    writeLe32(bmp, 34, 4096U);
+    const BmpTestResult result = readBmpMemory(bmp.data(), static_cast<int>(bmp.size()));
+
+    ASSERT_EQ(0, result.errorCode);
+    ASSERT_EQ(4, result.width);
+    ASSERT_EQ(1, result.height);
+}
+
 //=============================================================================
 // Edge Cases
 //=============================================================================
