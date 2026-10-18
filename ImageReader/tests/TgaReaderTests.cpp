@@ -22,8 +22,6 @@ using namespace TestFramework;
 // Test Helpers
 //=============================================================================
 
-namespace {
-
 struct TgaTestResult {
     int errorCode;
     uint32_t crc;
@@ -35,7 +33,7 @@ struct TgaTestResult {
     TgaTestResult() : errorCode(-1), crc(0), width(0), height(0), bytesPerLine(0), hasAlpha(false) {}
 };
 
-TgaTestResult readTgaFile(const std::string& path) {
+static TgaTestResult readTgaFile(const std::string& path) {
     TgaTestResult result;
     TgaReader reader;
     CKBitmapProperties* props = nullptr;
@@ -59,7 +57,7 @@ TgaTestResult readTgaFile(const std::string& path) {
     return result;
 }
 
-TgaTestResult readTgaMemory(const void* data, int size) {
+static TgaTestResult readTgaMemory(const void* data, int size) {
     TgaTestResult result;
     TgaReader reader;
     CKBitmapProperties* props = nullptr;
@@ -83,15 +81,15 @@ TgaTestResult readTgaMemory(const void* data, int size) {
     return result;
 }
 
-std::string getTgaTestImagePath(const std::string& subdir, const std::string& filename) {
+static std::string getTgaTestImagePath(const std::string& subdir, const std::string& filename) {
     return joinPath(joinPath(joinPath(g_TestImagesDir, "tga"), subdir), filename);
 }
 
-std::string getTgaReferencePath(const std::string& subdir, const std::string& filename) {
+static std::string getTgaReferencePath(const std::string& subdir, const std::string& filename) {
     return joinPath(joinPath(joinPath(g_TestReferenceDir, "tga"), subdir), filename);
 }
 
-bool findTgaExpectedCrc(const std::string& subdir, const std::string& inputName, uint32_t& outCrc) {
+static bool findTgaExpectedCrc(const std::string& subdir, const std::string& inputName, uint32_t& outCrc) {
     // First, try CKImageReader-specific CRCs (preferred)
     std::string key = "tga/" + subdir + "/" + inputName;
     if (getReferenceCrc(key, outCrc)) {
@@ -111,8 +109,6 @@ bool findTgaExpectedCrc(const std::string& subdir, const std::string& inputName,
     }
     return false;
 }
-
-} // anonymous namespace
 
 //=============================================================================
 // Testsuite - Basic Format Tests
@@ -790,9 +786,7 @@ TEST(TgaReader, IsAlphaSaved_32bit) {
 // Additional Generated TGA Tests
 //=============================================================================
 
-namespace {
-
-std::vector<uint8_t> generateTgaUncompressed24(int width, int height, uint8_t origin = 0x20) {
+static std::vector<uint8_t> generateTgaUncompressed24(int width, int height, uint8_t origin = 0x20) {
     std::vector<uint8_t> data;
     
     // TGA header - 18 bytes
@@ -825,7 +819,7 @@ std::vector<uint8_t> generateTgaUncompressed24(int width, int height, uint8_t or
     return data;
 }
 
-std::vector<uint8_t> generateTgaUncompressed32(int width, int height, uint8_t origin = 0x28) {
+static std::vector<uint8_t> generateTgaUncompressed32(int width, int height, uint8_t origin = 0x28) {
     std::vector<uint8_t> data;
     
     data.push_back(0);       // ID length
@@ -855,7 +849,7 @@ std::vector<uint8_t> generateTgaUncompressed32(int width, int height, uint8_t or
     return data;
 }
 
-std::vector<uint8_t> generateTgaGrayscale(int width, int height) {
+static std::vector<uint8_t> generateTgaGrayscale(int width, int height) {
     std::vector<uint8_t> data;
     
     data.push_back(0);       // ID length
@@ -882,7 +876,7 @@ std::vector<uint8_t> generateTgaGrayscale(int width, int height) {
     return data;
 }
 
-std::vector<uint8_t> generateTgaColormapped(int width, int height) {
+static std::vector<uint8_t> generateTgaColormapped(int width, int height) {
     std::vector<uint8_t> data;
     
     data.push_back(0);       // ID length
@@ -919,7 +913,7 @@ std::vector<uint8_t> generateTgaColormapped(int width, int height) {
     return data;
 }
 
-std::vector<uint8_t> generateTgaRLE24(int width, int height) {
+static std::vector<uint8_t> generateTgaRLE24(int width, int height) {
     std::vector<uint8_t> data;
     
     data.push_back(0);       // ID length
@@ -967,7 +961,7 @@ std::vector<uint8_t> generateTgaRLE24(int width, int height) {
     return data;
 }
 
-std::vector<uint8_t> generateTga16bit(int width, int height) {
+static std::vector<uint8_t> generateTga16bit(int width, int height) {
     std::vector<uint8_t> data;
     
     data.push_back(0);       // ID length
@@ -999,8 +993,6 @@ std::vector<uint8_t> generateTga16bit(int width, int height) {
     
     return data;
 }
-
-} // anonymous namespace
 
 TEST(TgaReader, Generated_1x1_24bit) {
     std::vector<uint8_t> tga = generateTgaUncompressed24(1, 1);

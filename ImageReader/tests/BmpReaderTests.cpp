@@ -23,8 +23,6 @@ using namespace TestFramework;
 // Test Helpers
 //=============================================================================
 
-namespace {
-
 // Helper to read a BMP file and validate output
 struct BmpTestResult {
     int errorCode;
@@ -37,7 +35,7 @@ struct BmpTestResult {
     BmpTestResult() : errorCode(-1), crc(0), width(0), height(0), bytesPerLine(0), hasAlpha(false) {}
 };
 
-BmpTestResult readBmpFile(const std::string& path) {
+static BmpTestResult readBmpFile(const std::string& path) {
     BmpTestResult result;
     BmpReader reader;
     CKBitmapProperties* props = nullptr;
@@ -63,7 +61,7 @@ BmpTestResult readBmpFile(const std::string& path) {
     return result;
 }
 
-BmpTestResult readBmpMemory(const void* data, int size) {
+static BmpTestResult readBmpMemory(const void* data, int size) {
     BmpTestResult result;
     BmpReader reader;
     CKBitmapProperties* props = nullptr;
@@ -87,19 +85,19 @@ BmpTestResult readBmpMemory(const void* data, int size) {
     return result;
 }
 
-void writeLe16(std::vector<CKBYTE>& bytes, size_t offset, CKWORD value) {
+static void writeLe16(std::vector<CKBYTE>& bytes, size_t offset, CKWORD value) {
     bytes[offset] = static_cast<CKBYTE>(value & 0xFFU);
     bytes[offset + 1] = static_cast<CKBYTE>((value >> 8U) & 0xFFU);
 }
 
-void writeLe32(std::vector<CKBYTE>& bytes, size_t offset, CKDWORD value) {
+static void writeLe32(std::vector<CKBYTE>& bytes, size_t offset, CKDWORD value) {
     bytes[offset] = static_cast<CKBYTE>(value & 0xFFU);
     bytes[offset + 1] = static_cast<CKBYTE>((value >> 8U) & 0xFFU);
     bytes[offset + 2] = static_cast<CKBYTE>((value >> 16U) & 0xFFU);
     bytes[offset + 3] = static_cast<CKBYTE>((value >> 24U) & 0xFFU);
 }
 
-std::vector<CKBYTE> makeIndexedRleBmp(CKWORD bitCount, CKDWORD compression,
+static std::vector<CKBYTE> makeIndexedRleBmp(CKWORD bitCount, CKDWORD compression,
                                       const std::vector<CKBYTE>& rleData) {
     const CKDWORD paletteEntries = 1U << bitCount;
     const CKDWORD pixelDataOffset = 14U + 40U + paletteEntries * 4U;
@@ -120,16 +118,16 @@ std::vector<CKBYTE> makeIndexedRleBmp(CKWORD bitCount, CKDWORD compression,
     return bytes;
 }
 
-std::string getBmpTestImagePath(const std::string& filename) {
+static std::string getBmpTestImagePath(const std::string& filename) {
     return joinPath(joinPath(g_TestImagesDir, "bmp/images"), filename);
 }
 
-std::string getBmpReferencePath(const std::string& filename) {
+static std::string getBmpReferencePath(const std::string& filename) {
     return joinPath(joinPath(g_TestReferenceDir, "bmp/images"), filename);
 }
 
 // Find reference CRC - first tries CKImageReader-specific CRCs, then falls back to external refs
-bool findExpectedCrc(const std::string& inputName, uint32_t& outCrc) {
+static bool findExpectedCrc(const std::string& inputName, uint32_t& outCrc) {
     // First, try CKImageReader-specific CRCs (preferred)
     std::string key = "bmp/" + inputName;
     if (getReferenceCrc(key, outCrc)) {
@@ -149,8 +147,6 @@ bool findExpectedCrc(const std::string& inputName, uint32_t& outCrc) {
     }
     return false;
 }
-
-} // anonymous namespace
 
 //=============================================================================
 // Core Format Tests (OS/2 BITMAPCOREHEADER)
@@ -1028,8 +1024,6 @@ TEST(BmpReader, SaveLoad_RGB16_Writes16BitBmp) {
 // Additional Generated BMP Tests
 //=============================================================================
 
-namespace {
-
 #pragma pack(push, 1)
 struct BmpFileHeader {
     uint16_t type;
@@ -1054,7 +1048,7 @@ struct BmpInfoHeader {
 };
 #pragma pack(pop)
 
-std::vector<uint8_t> generateBmpRGB24(int width, int height) {
+static std::vector<uint8_t> generateBmpRGB24(int width, int height) {
     std::vector<uint8_t> data;
     
     int rowSize = (width * 3 + 3) & ~3;
@@ -1094,7 +1088,7 @@ std::vector<uint8_t> generateBmpRGB24(int width, int height) {
     return data;
 }
 
-std::vector<uint8_t> generateBmpRGBA32(int width, int height) {
+static std::vector<uint8_t> generateBmpRGBA32(int width, int height) {
     std::vector<uint8_t> data;
     
     int rowSize = width * 4;
@@ -1132,7 +1126,7 @@ std::vector<uint8_t> generateBmpRGBA32(int width, int height) {
     return data;
 }
 
-std::vector<uint8_t> generateBmp8bit(int width, int height) {
+static std::vector<uint8_t> generateBmp8bit(int width, int height) {
     std::vector<uint8_t> data;
     
     int rowSize = (width + 3) & ~3;
@@ -1179,7 +1173,7 @@ std::vector<uint8_t> generateBmp8bit(int width, int height) {
     return data;
 }
 
-std::vector<uint8_t> generateBmpTopDown24(int width, int height) {
+static std::vector<uint8_t> generateBmpTopDown24(int width, int height) {
     std::vector<uint8_t> data;
     
     int rowSize = (width * 3 + 3) & ~3;
@@ -1217,8 +1211,6 @@ std::vector<uint8_t> generateBmpTopDown24(int width, int height) {
     
     return data;
 }
-
-} // anonymous namespace
 
 TEST(BmpReader, Generated_1x1_RGB24) {
     std::vector<uint8_t> bmp = generateBmpRGB24(1, 1);
@@ -1682,17 +1674,13 @@ TEST(BmpReader, ReaderReuse) {
 // These tests ensure every fixture file in tests/images/bmp is exercised
 //=============================================================================
 
-namespace {
-
 // Files known to use unsupported BMP features (2-bit palette, etc.)
 // These are skipped rather than counted as failures
-bool isKnownUnsupportedBmp(const std::string& filename) {
+static bool isKnownUnsupportedBmp(const std::string& filename) {
     // 2-bit paletted BMPs are not commonly supported
     if (filename == "pal2.bmp" || filename == "pal2color.bmp") return true;
     return false;
 }
-
-} // anonymous namespace
 
 TEST(BmpReader, AllBmpFixtures_MustDecode) {
     // Test all .bmp files in the corpus - they must decode without error
