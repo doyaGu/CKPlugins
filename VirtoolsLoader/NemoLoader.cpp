@@ -154,9 +154,14 @@ CKERROR CKNemoLoader::Save(CKContext *context, CKSTRING FileName, CKObjectArray 
     if (!file)
         return CKERR_OUTOFMEMORY;
 
-    file->StartSave(FileName);
+    CKERROR ret = file->StartSave(FileName);
+    if (ret != CK_OK)
+    {
+        context->DeleteCKFile(file);
+        return ret;
+    }
     file->SaveObjects(liste);
-    CKERROR ret = file->EndSave();
+    ret = file->EndSave();
 
     context->DeleteCKFile(file);
 

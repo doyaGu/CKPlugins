@@ -313,6 +313,10 @@ if (CKPLUGINS_BUILD_VIRTOOLSLOADER)
     list(APPEND CKPLUGINS_COMPONENTS "VirtoolsLoader")
 endif ()
 
+if (CKPLUGINS_BUILD_TESTS)
+    add_subdirectory(tests)
+endif ()
+
 # =============================================================================
 # Configuration summary
 # =============================================================================

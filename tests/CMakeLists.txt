@@ -1,0 +1,25 @@
+include(FetchContent)
+if (NOT TARGET gtest_main)
+    FetchContent_Declare(googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.17.0)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif ()
+
+function(ckplugins_add_path_test TEST_NAME MODULE_NAME)
+    add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+    target_link_libraries(${TEST_NAME} PRIVATE CK2 VxMath gtest_main)
+    target_compile_definitions(${TEST_NAME} PRIVATE READER_MODULE_FILE="$<TARGET_FILE:${MODULE_NAME}>")
+    target_compile_features(${TEST_NAME} PRIVATE cxx_std_17)
+    set_target_properties(${TEST_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    add_dependencies(${TEST_NAME} ${MODULE_NAME})
+    if (COMMAND vx_copy_runtime_dependencies)
+        vx_copy_runtime_dependencies(${TEST_NAME})
+    endif ()
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+endfunction()
+
+if (TARGET VirtoolsLoader)
+    ckplugins_add_path_test(NemoLoaderAnsiPathTest VirtoolsLoader)
+endif ()
