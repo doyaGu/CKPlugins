@@ -391,6 +391,11 @@ bool getReferenceCrc(const std::string& key, uint32_t& outCrc) {
 // Main
 //=============================================================================
 
+#ifdef CK_LIB
+#define CKGetPluginInfoCount CKGet_ImageReader_PluginInfoCount
+#define CKGetPluginInfo CKGet_ImageReader_PluginInfo
+#endif
+
 // Forward declaration of plugin initialization function
 PLUGIN_EXPORT CKPluginInfo* CKGetPluginInfo(int index);
 PLUGIN_EXPORT int CKGetPluginInfoCount();
