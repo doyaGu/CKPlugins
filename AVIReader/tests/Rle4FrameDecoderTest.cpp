@@ -12,9 +12,7 @@
 
 using namespace testutil;
 
-namespace {
-
-avi::AviStreamInfo MakeRle4Info(int w, int h, const std::vector<uint32_t> &palette = {})
+static avi::AviStreamInfo MakeRle4Info(int w, int h, const std::vector<uint32_t> &palette = {})
 {
     avi::AviStreamInfo info;
     info.type = avi::kStreamType_vids;
@@ -29,7 +27,7 @@ avi::AviStreamInfo MakeRle4Info(int w, int h, const std::vector<uint32_t> &palet
     return info;
 }
 
-std::vector<uint32_t> MakeGreyPalette()
+static std::vector<uint32_t> MakeGreyPalette()
 {
     std::vector<uint32_t> pal(16);
     for (int i = 0; i < 16; ++i)
@@ -39,8 +37,6 @@ std::vector<uint32_t> MakeGreyPalette()
                  static_cast<uint32_t>(i);
     return pal;
 }
-
-} // namespace
 
 TEST(Rle4FrameDecoder, RunEncodingAlternatesNibbles)
 {

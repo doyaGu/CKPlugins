@@ -14,15 +14,11 @@
 
 using namespace testutil;
 
-namespace {
-
 // Helper: aligned stride matching the source code
-int AlignedStride(int width, int bpp)
+static int AlignedStride(int width, int bpp)
 {
     return ((width * bpp + 31) & ~31) / 8;
 }
-
-} // namespace
 
 // ===========================================================================
 // 24bpp decode

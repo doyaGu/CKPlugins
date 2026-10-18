@@ -7,10 +7,7 @@
 // stb_image is compiled in StbImageImpl.cpp; we only need the declarations here.
 #include "stb_image.h"
 
-namespace
-{
-
-bool MulSizeOverflow(size_t a, size_t b, size_t &out)
+static bool MulSizeOverflow(size_t a, size_t b, size_t &out)
 {
     if (a != 0 && b > (std::numeric_limits<size_t>::max() / a))
         return true;
@@ -18,7 +15,7 @@ bool MulSizeOverflow(size_t a, size_t b, size_t &out)
     return false;
 }
 
-bool ComputeAlignedStride(int width, int bpp, size_t &outStride)
+static bool ComputeAlignedStride(int width, int bpp, size_t &outStride)
 {
     if (width <= 0 || bpp <= 0)
         return false;
@@ -33,7 +30,7 @@ bool ComputeAlignedStride(int width, int bpp, size_t &outStride)
     return true;
 }
 
-bool HasValidOutputStride(int width, int outputStride)
+static bool HasValidOutputStride(int width, int outputStride)
 {
     if (width <= 0 || outputStride <= 0)
         return false;
@@ -43,21 +40,21 @@ bool HasValidOutputStride(int width, int outputStride)
     return static_cast<size_t>(outputStride) >= minStride;
 }
 
-uint8_t ClampByte(int v)
+static uint8_t ClampByte(int v)
 {
     if (v < 0) return 0;
     if (v > 255) return 255;
     return static_cast<uint8_t>(v);
 }
 
-uint8_t ExpandBitsTo8(uint32_t v, int bits)
+static uint8_t ExpandBitsTo8(uint32_t v, int bits)
 {
     if (bits <= 0) return 0;
     if (bits >= 8) return static_cast<uint8_t>(v >> (bits - 8));
     return static_cast<uint8_t>((v * 255u) / ((1u << bits) - 1u));
 }
 
-uint8_t ChannelFromMask(uint32_t pixel, uint32_t mask)
+static uint8_t ChannelFromMask(uint32_t pixel, uint32_t mask)
 {
     if (mask == 0)
         return 0;
@@ -78,7 +75,7 @@ uint8_t ChannelFromMask(uint32_t pixel, uint32_t mask)
     return ExpandBitsTo8(field, bits);
 }
 
-void YuvToBgr(uint8_t y, uint8_t u, uint8_t v, uint8_t &outB, uint8_t &outG, uint8_t &outR)
+static void YuvToBgr(uint8_t y, uint8_t u, uint8_t v, uint8_t &outB, uint8_t &outG, uint8_t &outR)
 {
     const int c = static_cast<int>(y) - 16;
     const int d = static_cast<int>(u) - 128;
@@ -95,13 +92,13 @@ void YuvToBgr(uint8_t y, uint8_t u, uint8_t v, uint8_t &outB, uint8_t &outG, uin
 
 /// Map source row index to account for top-down vs bottom-up source storage.
 /// Output is always bottom-up, so for bottom-up source row y stays y.
-int SourceRow(bool srcTopDown, int y, int height)
+static int SourceRow(bool srcTopDown, int y, int height)
 {
     return srcTopDown ? (height - 1 - y) : y;
 }
 
 /// Write a 32bpp BGRA pixel at dst[x*4..x*4+3].
-void WriteBgra(uint8_t *dst, int x, uint8_t b, uint8_t g, uint8_t r, uint8_t a = 0xFF)
+static void WriteBgra(uint8_t *dst, int x, uint8_t b, uint8_t g, uint8_t r, uint8_t a = 0xFF)
 {
     dst[x * 4 + 0] = b;
     dst[x * 4 + 1] = g;
@@ -110,7 +107,7 @@ void WriteBgra(uint8_t *dst, int x, uint8_t b, uint8_t g, uint8_t r, uint8_t a =
 }
 
 /// Write a packed ARGB word at dst[0..3] in BGRA byte order.
-void WriteArgb(uint8_t *dst, uint32_t argb)
+static void WriteArgb(uint8_t *dst, uint32_t argb)
 {
     dst[0] = static_cast<uint8_t>(argb        & 0xFFu);
     dst[1] = static_cast<uint8_t>((argb >> 8)  & 0xFFu);
@@ -120,7 +117,7 @@ void WriteArgb(uint8_t *dst, uint32_t argb)
 
 /// Resolve a palette index to a packed 32bpp ARGB colour.
 /// Falls back to a greyscale value when the palette is empty or the index is out of range.
-uint32_t ResolvePaletteEntry(const std::vector<uint32_t> &palette, uint8_t index)
+static uint32_t ResolvePaletteEntry(const std::vector<uint32_t> &palette, uint8_t index)
 {
     if (!palette.empty() && index < palette.size())
         return palette[index];
@@ -130,7 +127,7 @@ uint32_t ResolvePaletteEntry(const std::vector<uint32_t> &palette, uint8_t index
            index;
 }
 
-uint8_t ReadIndexedPixel(const uint8_t *src, int x, int bpp)
+static uint8_t ReadIndexedPixel(const uint8_t *src, int x, int bpp)
 {
     if (bpp == 8)
         return src[x];
@@ -141,22 +138,20 @@ uint8_t ReadIndexedPixel(const uint8_t *src, int x, int bpp)
     return 0;
 }
 
-uint8_t HighNibble(uint8_t value)
+static uint8_t HighNibble(uint8_t value)
 {
     return static_cast<uint8_t>(value >> 4);
 }
 
-uint8_t LowNibble(uint8_t value)
+static uint8_t LowNibble(uint8_t value)
 {
     return static_cast<uint8_t>(value & 0x0Fu);
 }
 
-bool ValidArgs(const uint8_t *data, const uint8_t *output, int width, int height, int outputStride)
+static bool ValidArgs(const uint8_t *data, const uint8_t *output, int width, int height, int outputStride)
 {
     return data && output && width > 0 && height > 0 && outputStride > 0;
 }
-
-} // namespace
 
 // ===========================================================================
 // Factory
@@ -674,17 +669,14 @@ bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 // Msvideo1FrameDecoder  (Microsoft Video 1 / CRAM, 16bpp)
 // ===========================================================================
 
-namespace
-{
-
 /// 5-bit -> 8-bit expansion with bit replication.
-uint8_t Expand5To8(uint32_t v)
+static uint8_t Expand5To8(uint32_t v)
 {
     return static_cast<uint8_t>((v << 3) | (v >> 2));
 }
 
 /// Unpack a 15-bit RGB555 colour word to 32bpp ARGB.
-uint32_t Rgb555ToArgb32(uint16_t c)
+static uint32_t Rgb555ToArgb32(uint16_t c)
 {
     c &= 0x7FFFu;
     // Microsoft Video 1 16bpp uses RGB555 (R: bits 10-14, G: 5-9, B: 0-4).
@@ -694,8 +686,6 @@ uint32_t Rgb555ToArgb32(uint16_t c)
     // ARGB word; in little-endian memory this is B, G, R, A.
     return 0xFF000000u | (r << 16) | (g << 8) | b;
 }
-
-} // namespace
 
 bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                                   int width, int height,
