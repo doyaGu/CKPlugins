@@ -5,13 +5,8 @@
 #include <cstring>
 #include <limits>
 
-namespace
-{
-
-constexpr int kMaxVideoDimension = 16384;
-constexpr size_t kMaxOutputFrameBytes = 256u * 1024u * 1024u; // 256 MiB
-
-} // namespace
+static constexpr int kMaxVideoDimension = 16384;
+static constexpr size_t kMaxOutputFrameBytes = 256u * 1024u * 1024u; // 256 MiB
 
 // ===========================================================================
 // Plugin entry points (CK_LIB / DLL naming)
@@ -124,6 +119,10 @@ bool AVIReader::DecodeFramePayload(int frameIndex)
     if (!m_Demuxer.ReadFrameData(m_VideoStream, frameIndex, m_CompressedBuf))
         return false;
 
+    // An empty AVI sample advances time without changing the decoded picture.
+    if (m_CompressedBuf.empty())
+        return true;
+
     return m_Decoder->Decode(m_CompressedBuf.data(), m_CompressedBuf.size(),
                              info->width, info->height,
                              m_FrameBuffer.data(), m_OutputStride);
@@ -131,6 +130,27 @@ bool AVIReader::DecodeFramePayload(int frameIndex)
 
 bool AVIReader::DecodeFrameWithDependencies(int frameIndex)
 {
+    // Resolve a dropped sample to the picture it holds. Leading dropped samples
+    // use the first coded picture, as AVIStreamGetFrame does.
+    int pictureFrame = frameIndex;
+    while (pictureFrame >= 0 && m_Demuxer.GetFrameInfo(m_VideoStream, pictureFrame)->size == 0)
+        --pictureFrame;
+    if (pictureFrame < 0)
+    {
+        pictureFrame = 0;
+        while (pictureFrame < m_FrameCount && m_Demuxer.GetFrameInfo(m_VideoStream, pictureFrame)->size == 0)
+            ++pictureFrame;
+        if (pictureFrame == m_FrameCount)
+        {
+            // A stream consisting entirely of dropped samples displays black.
+            memset(m_FrameBuffer.data(), 0, m_FrameBuffer.size());
+            for (size_t i = 3; i < m_FrameBuffer.size(); i += 4)
+                m_FrameBuffer[i] = 255;
+            return true;
+        }
+    }
+    frameIndex = pictureFrame;
+
     if (!m_Decoder->NeedsSequentialFrames())
     {
         if (!DecodeFramePayload(frameIndex))

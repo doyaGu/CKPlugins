@@ -122,8 +122,12 @@ private:
     /// Parse an OpenDML super-index 'indx' chunk into the current stream entry.
     bool ParseSuperIndex(const RiffReader::Chunk &chunk, StreamEntry &stream);
 
-    /// Build the frame index. Tries OpenDML first, falls back to idx1.
+    /// Build the frame index. Tries OpenDML, idx1, then the movi chunks.
     bool BuildIndex();
+
+    /// Recover a classic AVI index from the first movi list, including rec lists.
+    bool BuildMoviIndex();
+    bool ScanMoviList(const RiffReader::Chunk &list);
 
     /// Build frame index from classic idx1 chunk.
     bool BuildIdx1Index();

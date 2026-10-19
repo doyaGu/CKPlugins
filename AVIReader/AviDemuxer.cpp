@@ -4,9 +4,6 @@
 #include <cstring>
 #include <limits>
 
-namespace
-{
-
 constexpr uint32_t kMaxStreams = 64;
 constexpr uint32_t kMaxFramePayloadBytes = 256u * 1024u * 1024u; // 256 MiB
 constexpr uint32_t kMaxFormatChunkBytes = 4u * 1024u * 1024u;    // 4 MiB
@@ -15,7 +12,7 @@ constexpr uint32_t kMaxSuperIndexEntries = 262144u;
 constexpr uint32_t kMaxStdIndexEntries = 1000000u;
 constexpr size_t kMaxFramesPerStream = 4000000u;
 
-bool MulSizeOverflow(size_t a, size_t b, size_t &out)
+static bool MulSizeOverflow(size_t a, size_t b, size_t &out)
 {
     if (a != 0 && b > (std::numeric_limits<size_t>::max() / a))
         return true;
@@ -23,7 +20,7 @@ bool MulSizeOverflow(size_t a, size_t b, size_t &out)
     return false;
 }
 
-bool AddI64Overflow(int64_t a, int64_t b, int64_t &out)
+static bool AddI64Overflow(int64_t a, int64_t b, int64_t &out)
 {
     if ((b > 0 && a > (std::numeric_limits<int64_t>::max() - b)) ||
         (b < 0 && a < (std::numeric_limits<int64_t>::min() - b)))
@@ -38,7 +35,7 @@ struct ChunkIdMap
     int streamIdx;
 };
 
-int FindStreamIndexByChunkId(const std::vector<ChunkIdMap> &idMap, uint32_t chunkId)
+static int FindStreamIndexByChunkId(const std::vector<ChunkIdMap> &idMap, uint32_t chunkId)
 {
     for (const auto &m : idMap)
     {
@@ -48,7 +45,7 @@ int FindStreamIndexByChunkId(const std::vector<ChunkIdMap> &idMap, uint32_t chun
     return -1;
 }
 
-bool ComputeIdx1Offsets(const avi::AviOldIndexEntry &e, int64_t base, int64_t fileSize,
+static bool ComputeIdx1Offsets(const avi::AviOldIndexEntry &e, int64_t base, int64_t fileSize,
                         int64_t &dataOffset, int64_t &headerOffset)
 {
     if (base < 0 || base > fileSize)
@@ -65,14 +62,14 @@ bool ComputeIdx1Offsets(const avi::AviOldIndexEntry &e, int64_t base, int64_t fi
     return true;
 }
 
-bool IsIdx1EntryOffsetInBounds(const avi::AviOldIndexEntry &e, int64_t base, int64_t fileSize)
+static bool IsIdx1EntryOffsetInBounds(const avi::AviOldIndexEntry &e, int64_t base, int64_t fileSize)
 {
     int64_t dataOffset = 0;
     int64_t headerOffset = 0;
     return ComputeIdx1Offsets(e, base, fileSize, dataOffset, headerOffset);
 }
 
-bool IsIdx1EntryOffsetHeaderValid(RiffReader &reader, const avi::AviOldIndexEntry &e,
+static bool IsIdx1EntryOffsetHeaderValid(RiffReader &reader, const avi::AviOldIndexEntry &e,
                                   int64_t base, int64_t fileSize)
 {
     int64_t dataOffset = 0;
@@ -93,7 +90,7 @@ bool IsIdx1EntryOffsetHeaderValid(RiffReader &reader, const avi::AviOldIndexEntr
     return true;
 }
 
-bool ResolveIdx1EntryBaseByBounds(const avi::AviOldIndexEntry &e, int64_t preferredBase,
+static bool ResolveIdx1EntryBaseByBounds(const avi::AviOldIndexEntry &e, int64_t preferredBase,
                                   bool haveMoviBase, int64_t moviIdOffset, int64_t fileSize,
                                   int64_t &resolvedBase)
 {
@@ -108,7 +105,7 @@ bool ResolveIdx1EntryBaseByBounds(const avi::AviOldIndexEntry &e, int64_t prefer
     return true;
 }
 
-bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIndexEntry &e,
+static bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIndexEntry &e,
                                   int64_t preferredBase, bool haveMoviBase, int64_t moviIdOffset,
                                   int64_t fileSize, int64_t &resolvedBase)
 {
@@ -122,8 +119,6 @@ bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIndexEntr
     resolvedBase = altBase;
     return true;
 }
-
-} // namespace
 
 // ===========================================================================
 // Construction / destruction
@@ -257,10 +252,16 @@ const avi::FrameIndexEntry *AviDemuxer::GetFrameInfo(int streamIndex, int frameI
 bool AviDemuxer::ReadFrameData(int streamIndex, int frameIndex, std::vector<uint8_t> &outData)
 {
     const avi::FrameIndexEntry *entry = GetFrameInfo(streamIndex, frameIndex);
-    if (!entry || entry->size == 0 || entry->size > kMaxFramePayloadBytes)
+    if (!entry || entry->size > kMaxFramePayloadBytes)
     {
         outData.clear();
         return false;
+    }
+
+    if (entry->size == 0)
+    {
+        outData.clear();
+        return true;
     }
 
     if (entry->offset < 0)
@@ -695,7 +696,73 @@ bool AviDemuxer::BuildIndex()
         // Fall through to idx1 if OpenDML parsing fails.
     }
 
-    return BuildIdx1Index();
+    if (BuildIdx1Index())
+        return true;
+    return BuildMoviIndex();
+}
+
+bool AviDemuxer::BuildMoviIndex()
+{
+    for (size_t i = 0; i < m_Streams.size(); ++i)
+        m_Streams[i].index.clear();
+
+    RiffReader::Chunk movi;
+    if (m_MoviDataOffset < 12 || !m_Reader.SeekTo(m_MoviDataOffset - 12) ||
+        !m_Reader.ReadChunkHeader(movi) || !movi.IsList() || movi.listType != avi::kFourCC_movi ||
+        !ScanMoviList(movi))
+        return false;
+
+    for (size_t i = 0; i < m_Streams.size(); ++i)
+        if (!m_Streams[i].index.empty())
+            return true;
+    return false;
+}
+
+bool AviDemuxer::ScanMoviList(const RiffReader::Chunk &list)
+{
+    if (!m_Reader.DescendInto(list))
+        return false;
+
+    const int64_t end = list.dataOffset - 4 + list.size;
+    while (m_Reader.Tell() < end)
+    {
+        RiffReader::Chunk child;
+        if (!m_Reader.ReadChunkHeader(child))
+            return false;
+        if (child.IsList() && child.listType == avi::kFourCC_rec)
+        {
+            if (!ScanMoviList(child))
+                return false;
+        }
+        else
+        {
+            const int tens = (child.id & 255) - '0';
+            const int ones = ((child.id >> 8) & 255) - '0';
+            const int streamIndex = tens * 10 + ones;
+            if (tens >= 0 && tens <= 9 && ones >= 0 && ones <= 9 &&
+                streamIndex < static_cast<int>(m_Streams.size()))
+            {
+                StreamEntry &stream = m_Streams[streamIndex];
+                const uint32_t kind = child.id >> 16;
+                const bool video = stream.info.type == avi::kStreamType_vids &&
+                    (kind == ('d' | ('b' << 8)) || kind == ('d' | ('c' << 8)));
+                const bool audio = stream.info.type == avi::kStreamType_auds && kind == ('w' | ('b' << 8));
+                if (video || audio)
+                {
+                    if (child.size > kMaxFramePayloadBytes || stream.index.size() >= kMaxFramesPerStream)
+                        return false;
+                    avi::FrameIndexEntry frame;
+                    frame.offset = child.dataOffset;
+                    frame.size = child.size;
+                    frame.isKeyframe = kind == ('d' | ('b' << 8));
+                    stream.index.push_back(frame);
+                }
+            }
+        }
+        if (!m_Reader.SkipChunk(child))
+            return false;
+    }
+    return m_Reader.Ascend();
 }
 
 // ---------------------------------------------------------------------------
@@ -801,7 +868,7 @@ bool AviDemuxer::BuildIdx1Index()
     {
         const avi::AviOldIndexEntry &e = idx1Entries[n];
 
-        if (e.dwSize == 0 || e.dwSize > kMaxFramePayloadBytes)
+        if (e.dwSize > kMaxFramePayloadBytes)
             continue;
 
         // Find stream index.
@@ -969,7 +1036,7 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
             return false;
 
         const uint32_t frameSize = e.dwSize & 0x7FFFFFFFu;
-        if (frameSize == 0 || frameSize > kMaxFramePayloadBytes)
+        if (frameSize > kMaxFramePayloadBytes)
             continue;
 
         avi::FrameIndexEntry fe;
