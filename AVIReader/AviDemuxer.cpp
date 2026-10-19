@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <new>
 
 constexpr uint32_t kMaxStreams = 64;
 constexpr uint32_t kMaxFramePayloadBytes = 256u * 1024u * 1024u; // 256 MiB
@@ -62,13 +63,6 @@ static bool ComputeIdx1Offsets(const avi::AviOldIndexEntry &e, int64_t base, int
     return true;
 }
 
-static bool IsIdx1EntryOffsetInBounds(const avi::AviOldIndexEntry &e, int64_t base, int64_t fileSize)
-{
-    int64_t dataOffset = 0;
-    int64_t headerOffset = 0;
-    return ComputeIdx1Offsets(e, base, fileSize, dataOffset, headerOffset);
-}
-
 static bool IsIdx1EntryOffsetHeaderValid(RiffReader &reader, const avi::AviOldIndexEntry &e,
                                   int64_t base, int64_t fileSize)
 {
@@ -87,21 +81,6 @@ static bool IsIdx1EntryOffsetHeaderValid(RiffReader &reader, const avi::AviOldIn
         return false;
     if (chunkSize < e.dwSize)
         return false;
-    return true;
-}
-
-static bool ResolveIdx1EntryBaseByBounds(const avi::AviOldIndexEntry &e, int64_t preferredBase,
-                                  bool haveMoviBase, int64_t moviIdOffset, int64_t fileSize,
-                                  int64_t &resolvedBase)
-{
-    resolvedBase = preferredBase;
-    if (IsIdx1EntryOffsetInBounds(e, resolvedBase, fileSize))
-        return true;
-
-    const int64_t altBase = (resolvedBase == 0 && haveMoviBase) ? moviIdOffset : 0;
-    if (!IsIdx1EntryOffsetInBounds(e, altBase, fileSize))
-        return false;
-    resolvedBase = altBase;
     return true;
 }
 
@@ -510,7 +489,13 @@ bool AviDemuxer::ParseStreamList(const RiffReader::Chunk &strlChunk)
         else if (child.id == avi::kFourCC_indx && foundStrh)
         {
             if (!ParseStreamIndex(child, stream))
-                return false;
+            {
+                // An optional index is not the stream format. Discard its
+                // partial state and let another index or movi recover frames.
+                stream.headerIndex.clear();
+                stream.superIndex.clear();
+                stream.superIndexChunkId = 0;
+            }
         }
 
         if (!m_Reader.SkipChunk(child))
@@ -823,29 +808,104 @@ bool AviDemuxer::ParseSuperIndex(const RiffReader::Chunk &chunk, StreamEntry &st
 // Index building
 // ===========================================================================
 
+struct AviPhysicalIndex
+{
+    avi::FrameIndexEntry *frames = nullptr;
+    unsigned char *seen = nullptr;
+    size_t count = 0;
+    ~AviPhysicalIndex() { delete[] frames; delete[] seen; }
+};
+
+static bool MatchesPhysicalIndex(const avi::FrameIndexEntry *entries, size_t count,
+                                 AviPhysicalIndex &physical, bool mustUse, uint32_t declaredCount)
+{
+    if (!count || (mustUse && declaredCount && count != declaredCount))
+        return false;
+    if (physical.count)
+        memset(physical.seen, 0, physical.count);
+    bool virtualDrop = false;
+    for (size_t i = 0; i < count; ++i)
+    {
+        const avi::FrameIndexEntry &frame = entries[i];
+        if (!frame.offset && !frame.size)
+        {
+            virtualDrop = true;
+            continue;
+        }
+        size_t low = 0, high = physical.count;
+        while (low < high)
+        {
+            const size_t middle = low + (high - low) / 2;
+            if (physical.frames[middle].offset < frame.offset)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+        if (low == physical.count || physical.frames[low].offset != frame.offset ||
+            physical.frames[low].size != frame.size || (!mustUse && physical.seen[low]))
+            return false;
+        physical.seen[low] = 1;
+    }
+    if (virtualDrop && declaredCount && count != declaredCount)
+        return false;
+    if (!mustUse)
+        for (size_t i = 0; i < physical.count; ++i)
+            if (!physical.seen[i])
+                return false;
+    return true;
+}
+
 bool AviDemuxer::BuildIndex()
 {
-    // Prefer OpenDML index forms if any stream has one.
-    bool hasOpenDml = false;
-    for (const auto &s : m_Streams)
+    // Physical chunk boundaries establish ownership and completeness. Index
+    // order and keyframe flags are retained only from a valid candidate.
+    if (!BuildMoviIndex())
+        return false;
+    AviPhysicalIndex physical[kMaxStreams];
+    bool selected[kMaxStreams] = {};
+    const bool mustUse = (m_MainHeader.dwFlags & 0x20u) != 0; // AVIF_MUSTUSEINDEX
+    for (size_t i = 0; i < m_Streams.size(); ++i)
     {
-        if (!s.superIndex.empty() || !s.headerIndex.empty())
+        AviPhysicalIndex &p = physical[i];
+        p.count = m_Streams[i].index.size();
+        if (p.count)
         {
-            hasOpenDml = true;
-            break;
+            p.frames = new (std::nothrow) avi::FrameIndexEntry[p.count];
+            p.seen = new (std::nothrow) unsigned char[p.count];
+            if (!p.frames || !p.seen)
+                return false;
+            memcpy(p.frames, m_Streams[i].index.data(), p.count * sizeof(*p.frames));
         }
     }
-
-    if (hasOpenDml)
+    BuildOpenDmlIndex();
+    for (size_t i = 0; i < m_Streams.size(); ++i)
     {
-        if (BuildOpenDmlIndex())
-            return true;
-        // Fall through to idx1 if OpenDML parsing fails.
+        StreamEntry &stream = m_Streams[i];
+        selected[i] = MatchesPhysicalIndex(stream.index.data(), stream.index.size(), physical[i],
+                                           mustUse, stream.info.type == avi::kStreamType_vids ? stream.info.totalFrames : 0);
+        if (selected[i])
+            stream.headerIndex.swap(stream.index);
+        else
+            stream.headerIndex.clear();
+        stream.index.clear();
     }
-
-    if (!m_HasAvix && BuildIdx1Index())
-        return true;
-    return BuildMoviIndex();
+    BuildIdx1Index();
+    for (size_t i = 0; i < m_Streams.size(); ++i)
+    {
+        StreamEntry &stream = m_Streams[i];
+        if (selected[i])
+            stream.headerIndex.swap(stream.index);
+        else if (!MatchesPhysicalIndex(stream.index.data(), stream.index.size(), physical[i],
+                                        mustUse, stream.info.type == avi::kStreamType_vids ? stream.info.totalFrames : 0))
+        {
+            if (mustUse && physical[i].count)
+                return false; // The required presentation order cannot be inferred.
+            stream.index.resize(physical[i].count);
+            if (physical[i].count)
+                memcpy(stream.index.data(), physical[i].frames, physical[i].count * sizeof(*physical[i].frames));
+        }
+    }
+    return true;
 }
 
 bool AviDemuxer::GetFramePalette(int streamIndex, int frameIndex, uint32_t *colors) const
@@ -1023,7 +1083,8 @@ bool AviDemuxer::ScanMoviList(const RiffReader::Chunk &list)
 
 bool AviDemuxer::BuildIdx1Index()
 {
-    if (m_Idx1Offset <= 0 || m_Idx1Size < sizeof(avi::AviOldIndexEntry))
+    if (m_Idx1Offset <= 0 || m_Idx1Size < sizeof(avi::AviOldIndexEntry) ||
+        m_Idx1Size % sizeof(avi::AviOldIndexEntry) != 0)
         return false;
     if (m_Idx1Offset > m_Reader.FileSize())
         return false;
@@ -1113,9 +1174,6 @@ bool AviDemuxer::BuildIdx1Index()
     if (moviScore > absScore)
         offsetBase = moviIdOffset;
 
-    int strictValidated = 0;
-    const int kStrictValidationBudget = 64;
-
     for (uint32_t n = 0; n < entryCount; ++n)
     {
         const avi::AviOldIndexEntry &e = idx1Entries[n];
@@ -1129,16 +1187,9 @@ bool AviDemuxer::BuildIdx1Index()
             continue;
 
         int64_t resolvedBase = 0;
-        if (!ResolveIdx1EntryBaseByBounds(e, offsetBase, haveMoviBase, moviIdOffset, fileSize, resolvedBase))
+        if (!ResolveIdx1EntryBaseByHeader(m_Reader, e, offsetBase, haveMoviBase, moviIdOffset,
+                                         fileSize, resolvedBase))
             continue;
-
-        if (strictValidated < kStrictValidationBudget)
-        {
-            if (!ResolveIdx1EntryBaseByHeader(m_Reader, e, resolvedBase, haveMoviBase, moviIdOffset,
-                                              fileSize, resolvedBase))
-                continue;
-            ++strictValidated;
-        }
 
         if (m_Streams[streamIdx].index.size() >= kMaxFramesPerStream)
             return false;
@@ -1191,9 +1242,9 @@ bool AviDemuxer::BuildOpenDmlIndex()
             if (!ParseStandardIndex(static_cast<int64_t>(superEntry.qwOffset),
                                     superEntry.dwSize, stream.superIndexChunkId, stream.index))
             {
-                // Tolerate individual failures; some entries may point outside
-                // the file if the writer crashed.
-                continue;
+                // A successful prefix is not a complete stream timeline.
+                stream.index.clear();
+                break;
             }
         }
 
@@ -1294,21 +1345,21 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
 
         const uint32_t frameSize = e.dwSize & 0x7FFFFFFFu;
         if (frameSize > kMaxFramePayloadBytes)
-            continue;
+            return false;
 
         avi::FrameIndexEntry fe;
         if (AddI64Overflow(baseOffset, static_cast<int64_t>(e.dwOffset), fe.offset))
-            continue;
+            return false;
         fe.size = frameSize; // mask off not-keyframe flag
         fe.isKeyframe = (e.dwSize & 0x80000000u) == 0; // bit 31 set = NOT keyframe
 
         if (fe.offset < 0)
-            continue;
+            return false;
         int64_t frameEnd = 0;
         if (AddI64Overflow(fe.offset, static_cast<int64_t>(fe.size), frameEnd))
-            continue;
+            return false;
         if (frameEnd > m_Reader.FileSize())
-            continue;
+            return false;
 
         // Both offsets are relative to qwBaseOffset. dwSize covers the whole
         // frame, not just field one; the decoder consumes both JPEG fields.
@@ -1317,7 +1368,7 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
             int64_t secondField = 0;
             if (AddI64Overflow(baseOffset, avi::ReadLe32(entry + 8), secondField) ||
                 secondField <= fe.offset || secondField >= frameEnd)
-                continue;
+                return false;
         }
 
         try
