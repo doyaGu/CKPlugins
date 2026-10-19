@@ -952,7 +952,25 @@ bool AviDemuxer::BuildIndex()
     {
         StreamEntry &stream = m_Streams[i];
         if (selected[i])
+        {
+            // A second index of the same pictures must not discard palette
+            // events belonging to the required classic presentation order.
+            if (mustUse && !stream.index.empty() && stream.index[0].paletteStep >= 0 &&
+                stream.index.size() == stream.headerIndex.size() &&
+                MatchesPhysicalIndex(stream.index.data(), stream.index.size(), physical[i],
+                                     true, stream.info.totalFrames))
+            {
+                size_t f = 0;
+                for (; f < stream.index.size(); ++f)
+                    if (stream.index[f].offset != stream.headerIndex[f].offset ||
+                        stream.index[f].size != stream.headerIndex[f].size)
+                        break;
+                if (f == stream.index.size())
+                    for (f = 0; f < stream.index.size(); ++f)
+                        stream.headerIndex[f].paletteStep = stream.index[f].paletteStep;
+            }
             stream.headerIndex.swap(stream.index);
+        }
         else if (!MatchesPhysicalIndex(stream.index.data(), stream.index.size(), physical[i],
                                         mustUse, stream.info.type == avi::kStreamType_vids ? stream.info.totalFrames : 0))
         {
