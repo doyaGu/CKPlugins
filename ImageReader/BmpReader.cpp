@@ -2,8 +2,6 @@
 
 #include "XArray.h"
 
-#include <limits>
-
 //=============================================================================
 // Data Source Abstraction - Unified file/memory reading
 //=============================================================================
@@ -784,7 +782,7 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
                             : availablePixelData;
     }
 
-    if (pixelDataSize > static_cast<CKDWORD>(std::numeric_limits<int>::max()))
+    if (pixelDataSize > static_cast<CKDWORD>(INT_MAX))
     {
         delete src;
         return CKBITMAPERROR_FILECORRUPTED;
@@ -896,8 +894,9 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
 
     CKDWORD width = props->m_Format.Width;
     CKDWORD height = props->m_Format.Height;
-    CKBYTE *srcPixels = ImageReader::GetSavePixels(props);
-    CKDWORD srcStride = props->m_Format.BytesPerLine;
+    XArray<CKBYTE> converted;
+    CKDWORD srcStride = 0;
+    CKBYTE *srcPixels = ImageReader::GetSavePixels(props, converted, srcStride);
 
     if (!srcPixels || width == 0 || height == 0)
         return 0;
@@ -1021,9 +1020,11 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
             delete[] buffer;
             return 0;
         }
-        fwrite(buffer, 1, fileSize, fp);
-        fclose(fp);
+        const size_t written = fwrite(buffer, 1, fileSize, fp);
+        const int closed = fclose(fp);
         delete[] buffer;
+        if (written != fileSize || closed != 0)
+            return 0;
     }
     else
     {

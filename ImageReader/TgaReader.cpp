@@ -683,8 +683,11 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
 
     CKDWORD width = props->m_Format.Width;
     CKDWORD height = props->m_Format.Height;
-    CKBYTE *srcPixels = ImageReader::GetSavePixels(props);
-    CKDWORD srcStride = props->m_Format.BytesPerLine;
+    if (width > 65535 || height > 65535)
+        return 0;
+    XArray<CKBYTE> converted;
+    CKDWORD srcStride = 0;
+    CKBYTE *srcPixels = ImageReader::GetSavePixels(props, converted, srcStride);
 
     if (!srcPixels || width == 0 || height == 0)
         return 0;
@@ -822,9 +825,11 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
             delete[] buffer;
             return 0;
         }
-        fwrite(buffer, 1, fileSize, fp);
-        fclose(fp);
+        const size_t written = fwrite(buffer, 1, fileSize, fp);
+        const int closed = fclose(fp);
         delete[] buffer;
+        if (written != fileSize || closed != 0)
+            return 0;
     }
     else
     {

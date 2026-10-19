@@ -4,11 +4,14 @@
 #include "CKBitmapReader.h"
 #include "CKGlobals.h"
 #include "VxColor.h"
+#include "VxMath.h"
+#include "XArray.h"
 
 #include <cstring>
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
+#include <climits>
 
 #ifdef CK_LIB
 #define g_PluginInfo g_ImageReader_PluginInfo
@@ -189,6 +192,42 @@ public:
         if (bp->m_Format.Image)
             return bp->m_Format.Image;
         return static_cast<CKBYTE *>(bp->m_Data);
+    }
+
+    // Writers use BGRA32 internally. Convert through the source descriptor,
+    // keeping both its pixels and palette borrowed and its fields unchanged.
+    static CKBYTE *GetSavePixels(CKBitmapProperties *bp, XArray<CKBYTE> &converted, CKDWORD &stride)
+    {
+        VxImageDescEx source = bp->m_Format;
+        source.Image = GetSavePixels(bp);
+        if (!source.Image || source.Width <= 0 || source.Height <= 0 || source.Flags != 0)
+            return NULL;
+        if (source.BitsPerPixel != 8 && source.BitsPerPixel != 16 &&
+            source.BitsPerPixel != 24 && source.BitsPerPixel != 32)
+            return NULL;
+
+        const uint64_t rowBytes = (uint64_t)source.Width * 4;
+        const int64_t pitch = source.BytesPerLine;
+        if (rowBytes > INT_MAX || (uint64_t)(pitch < 0 ? -pitch : pitch) <
+            (uint64_t)source.Width * (source.BitsPerPixel / 8))
+            return NULL;
+        if (source.BitsPerPixel == 32 && source.ColorMapEntries == 0 &&
+            source.RedMask == R_MASK && source.GreenMask == G_MASK &&
+            source.BlueMask == B_MASK && source.AlphaMask == A_MASK && pitch > 0)
+        {
+            stride = (CKDWORD)pitch;
+            return source.Image;
+        }
+
+        const uint64_t size = rowBytes * source.Height;
+        if (size > INT_MAX) // XArray uses an int element count.
+            return NULL;
+        converted.Resize((int)size);
+        VxImageDescEx target;
+        FillFormatBGRA32(target, source.Width, source.Height, (int)rowBytes, converted.Begin());
+        VxDoBlit(source, target);
+        stride = (CKDWORD)rowBytes;
+        return target.Image;
     }
 
     // Shared save-side pixel conversions.
