@@ -404,7 +404,7 @@ static void DecodeRow32bpp(const XBYTE *src, XBYTE *dst, CKDWORD width,
             dst[x * 4 + 0] = src[x * 4 + 0];
             dst[x * 4 + 1] = src[x * 4 + 1];
             dst[x * 4 + 2] = src[x * 4 + 2];
-            dst[x * 4 + 3] = 255;
+            dst[x * 4 + 3] = src[x * 4 + 3];
         }
     }
 }
@@ -813,16 +813,9 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
     XBYTE *dstPixels = new XBYTE[(CKDWORD)dstTotal];
     if (hdr.compression == BI_RLE4 || hdr.compression == BI_RLE8)
     {
-        // Sparse RLE streams can end early or move with delta escapes. Make
-        // every pixel they do not cover deterministic and match the standard
-        // reference decoders: opaque black rather than uninitialized memory.
+        // RLE skips leave palette index zero, including early end and delta holes.
         for (CKDWORD pixel = 0; pixel < hdr.width * hdr.height; ++pixel)
-        {
-            dstPixels[pixel * 4 + 0] = 0;
-            dstPixels[pixel * 4 + 1] = 0;
-            dstPixels[pixel * 4 + 2] = 0;
-            dstPixels[pixel * 4 + 3] = 255;
-        }
+            SetBGRAFromPalette(dstPixels, pixel, 0, palette.Begin(), is3BytePalette, paletteEntries);
     }
     else
     {

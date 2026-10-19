@@ -577,6 +577,12 @@ int TGA_Read(void *data, int size, CKBitmapProperties *props)
             CKBYTE packet = srcPixels.Begin()[srcPos++];
             CKDWORD count = (packet & 0x7F) + 1;
 
+            if (count > totalPixels - pixelCount)
+            {
+                delete[] dstPixels;
+                return CKBITMAPERROR_FILECORRUPTED;
+            }
+
             if (packet & 0x80)
             {
                 // RLE packet
