@@ -516,17 +516,197 @@ static int ParseBmpHeader(BmpDataSource &src, BmpHeader &hdr)
     return 0;
 }
 
+// Exact palettes for up to 256 RGB colors; weighted median cut above that.
+// Quantization storage is bounded independently of image dimensions.
+struct BmpSaveColorBin
+{
+    uint64_t Count;
+    double Sum[3]; // R, G, B
+};
+
+struct BmpSaveColorBox
+{
+    int Min[3], Max[3];
+    uint64_t Count;
+};
+
+class BmpSavePalette
+{
+public:
+    BmpSavePalette() : m_Count(0), m_Reduced(FALSE)
+    {
+        memset(m_Colors, 0, sizeof(m_Colors));
+        memset(m_Hash, 0, sizeof(m_Hash));
+    }
+
+    void Build(const CKBYTE *pixels, CKDWORD width, CKDWORD height, CKDWORD stride)
+    {
+        for (CKDWORD y = 0; y < height; y++)
+        {
+            const CKBYTE *row = pixels + (size_t)y * stride;
+            for (CKDWORD x = 0; x < width; x++)
+            {
+                const CKBYTE *pixel = row + (size_t)x * 4;
+                unsigned slot = FindSlot(pixel);
+                if (m_Hash[slot])
+                    continue;
+                if (m_Count == 256)
+                {
+                    Reduce(pixels, width, height, stride);
+                    return;
+                }
+                memcpy(m_Colors + m_Count * 4, pixel, 3);
+                m_Hash[slot] = (CKWORD)(++m_Count);
+            }
+        }
+    }
+
+    CKBYTE Index(const CKBYTE *pixel) const
+    {
+        if (m_Reduced)
+            return m_Map[BinIndex(pixel)];
+        return (CKBYTE)(m_Hash[FindSlot(pixel)] - 1);
+    }
+
+    const CKBYTE *Colors() const { return m_Colors; }
+
+private:
+    unsigned FindSlot(const CKBYTE *pixel) const
+    {
+        unsigned rgb = ((unsigned)pixel[2] << 16) | ((unsigned)pixel[1] << 8) | pixel[0];
+        unsigned slot = (rgb * 2654435761u) >> 22;
+        while (m_Hash[slot])
+        {
+            const CKBYTE *color = m_Colors + (m_Hash[slot] - 1) * 4;
+            if (color[0] == pixel[0] && color[1] == pixel[1] && color[2] == pixel[2])
+                break;
+            slot = (slot + 1) & 1023;
+        }
+        return slot;
+    }
+
+    static unsigned BinIndex(const CKBYTE *pixel)
+    {
+        return ((unsigned)(pixel[2] >> 3) << 10) | ((unsigned)(pixel[1] >> 3) << 5) | (pixel[0] >> 3);
+    }
+
+    static void Measure(BmpSaveColorBox &box, const BmpSaveColorBin *bins)
+    {
+        int low[] = {31, 31, 31}, high[] = {0, 0, 0};
+        box.Count = 0;
+        for (int r = box.Min[0]; r <= box.Max[0]; r++)
+            for (int g = box.Min[1]; g <= box.Max[1]; g++)
+                for (int b = box.Min[2]; b <= box.Max[2]; b++)
+                {
+                    const uint64_t count = bins[(r << 10) | (g << 5) | b].Count;
+                    if (!count)
+                        continue;
+                    box.Count += count;
+                    const int value[] = {r, g, b};
+                    for (int c = 0; c < 3; c++)
+                    {
+                        if (value[c] < low[c]) low[c] = value[c];
+                        if (value[c] > high[c]) high[c] = value[c];
+                    }
+                }
+        memcpy(box.Min, low, sizeof(low));
+        memcpy(box.Max, high, sizeof(high));
+    }
+
+    void Reduce(const CKBYTE *pixels, CKDWORD width, CKDWORD height, CKDWORD stride)
+    {
+        XArray<BmpSaveColorBin> histogram;
+        histogram.Resize(32768);
+        BmpSaveColorBin *bins = histogram.Begin();
+        memset(bins, 0, 32768 * sizeof(BmpSaveColorBin));
+        for (CKDWORD y = 0; y < height; y++)
+        {
+            const CKBYTE *row = pixels + (size_t)y * stride;
+            for (CKDWORD x = 0; x < width; x++)
+            {
+                const CKBYTE *pixel = row + (size_t)x * 4;
+                BmpSaveColorBin &bin = bins[BinIndex(pixel)];
+                ++bin.Count;
+                for (int c = 0; c < 3; c++)
+                    bin.Sum[c] += pixel[2 - c];
+            }
+        }
+
+        BmpSaveColorBox boxes[256];
+        for (int c = 0; c < 3; c++) { boxes[0].Min[c] = 0; boxes[0].Max[c] = 31; }
+        Measure(boxes[0], bins);
+        m_Count = 1;
+        while (m_Count < 256)
+        {
+            int selected = -1, axis = 0;
+            double best = 0;
+            for (int i = 0; i < m_Count; i++)
+                for (int c = 0; c < 3; c++)
+                {
+                    double score = (double)boxes[i].Count * (boxes[i].Max[c] - boxes[i].Min[c]);
+                    if (score > best) { selected = i; axis = c; best = score; }
+                }
+            if (selected < 0)
+                break;
+            BmpSaveColorBox &left = boxes[selected];
+            uint64_t weights[32] = {};
+            for (int r = left.Min[0]; r <= left.Max[0]; r++)
+                for (int g = left.Min[1]; g <= left.Max[1]; g++)
+                    for (int b = left.Min[2]; b <= left.Max[2]; b++)
+                    {
+                        const int value[] = {r, g, b};
+                        weights[value[axis]] += bins[(r << 10) | (g << 5) | b].Count;
+                    }
+            uint64_t cumulative = 0;
+            int cut = left.Min[axis];
+            for (; cut < left.Max[axis]; cut++)
+            {
+                cumulative += weights[cut];
+                if (cumulative >= left.Count / 2 + left.Count % 2)
+                    break;
+            }
+            if (cut == left.Max[axis])
+                --cut;
+            boxes[m_Count] = left;
+            left.Max[axis] = cut;
+            boxes[m_Count].Min[axis] = cut + 1;
+            Measure(left, bins);
+            Measure(boxes[m_Count], bins);
+            ++m_Count;
+        }
+
+        memset(m_Colors, 0, sizeof(m_Colors));
+        memset(m_Map, 0, sizeof(m_Map));
+        for (int i = 0; i < m_Count; i++)
+        {
+            const BmpSaveColorBox &box = boxes[i];
+            double sum[3] = {};
+            for (int r = box.Min[0]; r <= box.Max[0]; r++)
+                for (int g = box.Min[1]; g <= box.Max[1]; g++)
+                    for (int b = box.Min[2]; b <= box.Max[2]; b++)
+                    {
+                        unsigned index = (r << 10) | (g << 5) | b;
+                        m_Map[index] = (CKBYTE)i;
+                        for (int c = 0; c < 3; c++) sum[c] += bins[index].Sum[c];
+                    }
+            for (int c = 0; c < 3; c++)
+                m_Colors[i * 4 + 2 - c] = (CKBYTE)(sum[c] / (double)box.Count + 0.5);
+        }
+        m_Reduced = TRUE;
+    }
+
+    int m_Count;
+    CKBOOL m_Reduced;
+    CKBYTE m_Colors[1024]; // BMP B,G,R,reserved entries; reserved stays zero.
+    CKWORD m_Hash[1024];
+    CKBYTE m_Map[32768];
+};
+
 //=============================================================================
 // RLE8 Encoding (for save)
 //=============================================================================
-static CKBYTE BmpSaveGray(const CKBYTE *row, CKDWORD x)
-{
-    const CKBYTE *pixel = row + (size_t)x * 4;
-    return ImageReader::ToGray(pixel[0], pixel[1], pixel[2]);
-}
-
 static CKBOOL BmpEncodeRle8(const CKBYTE *pixels, CKDWORD width, CKDWORD height,
-                           CKDWORD stride, ImageWriterBuffer &out)
+                           CKDWORD stride, const BmpSavePalette &palette, ImageWriterBuffer &out)
 {
     for (CKDWORD y = 0; y < height; y++)
     {
@@ -534,9 +714,9 @@ static CKBOOL BmpEncodeRle8(const CKBYTE *pixels, CKDWORD width, CKDWORD height,
         CKDWORD x = 0;
         while (x < width)
         {
-            CKBYTE v = BmpSaveGray(row, x);
+            CKBYTE v = palette.Index(row + (size_t)x * 4);
             CKDWORD runLen = 1;
-            while (x + runLen < width && runLen < 255 && BmpSaveGray(row, x + runLen) == v)
+            while (x + runLen < width && runLen < 255 && palette.Index(row + (size_t)(x + runLen) * 4) == v)
                 runLen++;
 
             if (runLen >= 2)
@@ -552,7 +732,7 @@ static CKBOOL BmpEncodeRle8(const CKBYTE *pixels, CKDWORD width, CKDWORD height,
             while (x + litLen < width && litLen < 255)
             {
                 if (x + litLen + 1 < width &&
-                    BmpSaveGray(row, x + litLen) == BmpSaveGray(row, x + litLen + 1))
+                    palette.Index(row + (size_t)(x + litLen) * 4) == palette.Index(row + (size_t)(x + litLen + 1) * 4))
                     break;
                 litLen++;
             }
@@ -563,7 +743,7 @@ static CKBOOL BmpEncodeRle8(const CKBYTE *pixels, CKDWORD width, CKDWORD height,
                 packet[0] = 0;
                 packet[1] = (CKBYTE)litLen;
                 for (CKDWORD i = 0; i < litLen; i++)
-                    packet[2 + i] = BmpSaveGray(row, x + i);
+                    packet[2 + i] = palette.Index(row + (size_t)(x + i) * 4);
                 packet[2 + litLen] = 0;
                 if (!out.Append(packet, 2 + litLen + (litLen & 1)))
                     return FALSE;
@@ -571,7 +751,7 @@ static CKBOOL BmpEncodeRle8(const CKBYTE *pixels, CKDWORD width, CKDWORD height,
             else
                 for (CKDWORD i = 0; i < litLen; i++)
                 {
-                    const CKBYTE packet[] = {1, BmpSaveGray(row, x + i)};
+                    const CKBYTE packet[] = {1, palette.Index(row + (size_t)(x + i) * 4)};
                     if (!out.Append(packet, sizeof(packet)))
                         return FALSE;
                 }
@@ -914,10 +1094,13 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
     CKBYTE *srcPixels = ImageReader::GetSavePixels(props, converted, srcStride);
     if (!srcPixels)
         return 0;
+    BmpSavePalette palette;
+    if (headerBitDepth == 8)
+        palette.Build(srcPixels, width, height, srcStride);
     if (useRle8)
     {
         ImageWriterBuffer count(NULL, INT_MAX - headerSize);
-        if (!BmpEncodeRle8(srcPixels, width, height, srcStride, count))
+        if (!BmpEncodeRle8(srcPixels, width, height, srcStride, palette, count))
             return 0;
         pixelDataSize = count.Size();
     }
@@ -948,20 +1131,14 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
     // Palette
     CKBYTE *palPtr = buffer + sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
     if (headerBitDepth == 8)
-    {
-        for (int i = 0; i < 256; i++)
-        {
-            palPtr[i * 4 + 0] = palPtr[i * 4 + 1] = palPtr[i * 4 + 2] = (CKBYTE)i;
-            palPtr[i * 4 + 3] = 0;
-        }
-    }
+        memcpy(palPtr, palette.Colors(), paletteSize);
 
     // Pixel data
     CKBYTE *dstData = buffer + headerSize;
     if (useRle8)
     {
         ImageWriterBuffer encoded(dstData, (size_t)pixelDataSize);
-        if (!BmpEncodeRle8(srcPixels, width, height, srcStride, encoded))
+        if (!BmpEncodeRle8(srcPixels, width, height, srcStride, palette, encoded))
         {
             delete[] buffer;
             return 0;
@@ -977,7 +1154,7 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
             if (headerBitDepth == 8)
             {
                 for (CKDWORD x = 0; x < width; x++)
-                    dstRow[x] = ImageReader::ToGray(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
+                    dstRow[x] = palette.Index(srcRow + (size_t)x * 4);
             }
             else if (headerBitDepth == 16)
             {
