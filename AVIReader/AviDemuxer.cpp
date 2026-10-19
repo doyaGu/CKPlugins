@@ -106,6 +106,7 @@ static bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIn
 AviDemuxer::AviDemuxer()
     : m_Open(false), m_HasAvix(false),
       m_PaletteChanges(nullptr), m_LastPaletteChange(nullptr),
+      m_PaletteSteps(nullptr), m_LastPaletteStep(nullptr),
       m_MoviDataOffset(0), m_MoviEndOffset(0),
       m_Idx1Offset(0), m_Idx1Size(0)
 {
@@ -136,12 +137,6 @@ bool AviDemuxer::Open(const char *filename)
             return false;
         }
 
-        if (!BuildIndex())
-        {
-            Close();
-            return false;
-        }
-
         bool indexedVideo = false;
         for (size_t i = 0; i < m_Streams.size(); ++i)
             if (m_Streams[i].info.type == avi::kStreamType_vids &&
@@ -155,6 +150,12 @@ bool AviDemuxer::Open(const char *filename)
                 return false;
             }
         }
+        if (!BuildIndex())
+        {
+            Close();
+            return false;
+        }
+
     }
     catch (...)
     {
@@ -168,6 +169,13 @@ bool AviDemuxer::Open(const char *filename)
 
 void AviDemuxer::Close()
 {
+    while (m_PaletteSteps)
+    {
+        PaletteStep *next = m_PaletteSteps->next;
+        delete m_PaletteSteps;
+        m_PaletteSteps = next;
+    }
+    m_LastPaletteStep = nullptr;
     while (m_PaletteChanges)
     {
         PaletteChange *next = m_PaletteChanges->next;
@@ -905,7 +913,30 @@ bool AviDemuxer::BuildIndex()
                 memcpy(stream.index.data(), physical[i].frames, physical[i].count * sizeof(*physical[i].frames));
         }
     }
-    return true;
+    bool anyFrames = false;
+    for (size_t i = 0; i < m_Streams.size(); ++i)
+    {
+        StreamEntry &stream = m_Streams[i];
+        int64_t anchor = m_MoviDataOffset;
+        for (size_t f = 0; f < stream.index.size(); ++f)
+            if (stream.index[f].offset)
+            {
+                anchor = stream.index[f].offset;
+                break;
+            }
+        // Without explicit palette events, a virtual slot holds the preceding
+        // logical sample's state. Leading slots use the first physical sample.
+        for (size_t f = 0; f < stream.index.size(); ++f)
+        {
+            avi::FrameIndexEntry &frame = stream.index[f];
+            if (frame.offset)
+                anchor = frame.offset;
+            else
+                frame.paletteOffset = anchor;
+        }
+        anyFrames = anyFrames || !stream.index.empty();
+    }
+    return anyFrames;
 }
 
 bool AviDemuxer::GetFramePalette(int streamIndex, int frameIndex, uint32_t *colors) const
@@ -916,9 +947,33 @@ bool AviDemuxer::GetFramePalette(int streamIndex, int frameIndex, uint32_t *colo
         return false;
     for (unsigned i = 0; i < 256; ++i)
         colors[i] = i < info->palette.size() ? info->palette[i] : (0xff000000u | i * 0x010101u);
+    if (frame->paletteStep >= 0)
+    {
+        bool valid = true;
+        const unsigned visibleColors = info->bitsPerPixel > 0 && info->bitsPerPixel <= 8 ?
+            1u << info->bitsPerPixel : 256;
+        for (const PaletteStep *step = m_PaletteSteps; step; step = step->next)
+        {
+            if (step->sequence > unsigned(frame->paletteStep))
+                break;
+            if (step->stream != streamIndex)
+                continue;
+            const PaletteChange *change = step->change;
+            if (!change)
+                valid = false;
+            else
+            {
+                memcpy(colors + change->first, change->colors, change->count * sizeof(uint32_t));
+                if (change->first == 0 && change->count >= visibleColors)
+                    valid = true;
+            }
+        }
+        return valid;
+    }
+    const int64_t anchor = frame->paletteOffset >= 0 ? frame->paletteOffset : frame->offset;
     for (const PaletteChange *change = m_PaletteChanges; change; change = change->next)
     {
-        if (change->offset > frame->offset)
+        if (change->offset > anchor)
             break;
         if (change->stream == streamIndex)
             memcpy(colors + change->first, change->colors, change->count * sizeof(uint32_t));
@@ -1024,10 +1079,7 @@ bool AviDemuxer::BuildMoviIndex()
     if (!ScanMovieLists(false))
         return false;
 
-    for (size_t i = 0; i < m_Streams.size(); ++i)
-        if (!m_Streams[i].index.empty())
-            return true;
-    return false;
+    return true;
 }
 
 bool AviDemuxer::ScanMoviList(const RiffReader::Chunk &list)
@@ -1174,10 +1226,43 @@ bool AviDemuxer::BuildIdx1Index()
     if (moviScore > absScore)
         offsetBase = moviIdOffset;
 
+    bool explicitPalette[kMaxStreams] = {};
+    for (uint32_t n = 0; n < entryCount; ++n)
+    {
+        const uint32_t id = idx1Entries[n].dwChunkId;
+        const int stream = avi::StreamIndexFromChunkId(id);
+        if ((id >> 16) == ('p' | ('c' << 8)) && stream >= 0 &&
+            stream < int(m_Streams.size()) && m_Streams[stream].info.type == avi::kStreamType_vids &&
+            m_Streams[stream].info.bitsPerPixel > 0 && m_Streams[stream].info.bitsPerPixel <= 8)
+            explicitPalette[stream] = true;
+    }
     for (uint32_t n = 0; n < entryCount; ++n)
     {
         const avi::AviOldIndexEntry &e = idx1Entries[n];
 
+        const int paletteStream = avi::StreamIndexFromChunkId(e.dwChunkId);
+        if ((e.dwChunkId >> 16) == ('p' | ('c' << 8)) && paletteStream >= 0 &&
+            paletteStream < int(m_Streams.size()) && explicitPalette[paletteStream])
+        {
+            int64_t base = 0, dataOffset = 0, headerOffset = 0;
+            const PaletteChange *change = nullptr;
+            if (ResolveIdx1EntryBaseByHeader(m_Reader, e, offsetBase, haveMoviBase, moviIdOffset, fileSize, base) &&
+                ComputeIdx1Offsets(e, base, fileSize, dataOffset, headerOffset))
+                for (change = m_PaletteChanges; change; change = change->next)
+                    if (change->offset == dataOffset && change->stream == paletteStream)
+                        break;
+            PaletteStep *step = new PaletteStep;
+            step->next = nullptr;
+            step->change = change && e.dwSize >= 4 + change->count * 4 ? change : nullptr;
+            step->sequence = n;
+            step->stream = paletteStream;
+            if (m_LastPaletteStep)
+                m_LastPaletteStep->next = step;
+            else
+                m_PaletteSteps = step;
+            m_LastPaletteStep = step;
+            continue;
+        }
         if (e.dwSize > kMaxFramePayloadBytes)
             continue;
 
@@ -1186,9 +1271,11 @@ bool AviDemuxer::BuildIdx1Index()
         if (streamIdx < 0)
             continue;
 
+        const bool virtualDrop = !e.dwSize && !e.dwOffset &&
+            m_Streams[streamIdx].info.type == avi::kStreamType_vids;
         int64_t resolvedBase = 0;
-        if (!ResolveIdx1EntryBaseByHeader(m_Reader, e, offsetBase, haveMoviBase, moviIdOffset,
-                                         fileSize, resolvedBase))
+        if (!virtualDrop && !ResolveIdx1EntryBaseByHeader(m_Reader, e, offsetBase, haveMoviBase, moviIdOffset,
+                                                         fileSize, resolvedBase))
             continue;
 
         if (m_Streams[streamIdx].index.size() >= kMaxFramesPerStream)
@@ -1196,8 +1283,11 @@ bool AviDemuxer::BuildIdx1Index()
 
         avi::FrameIndexEntry fe;
         // The offset in idx1 points to the chunk header (8 bytes before data).
-        if (AddI64Overflow(resolvedBase, static_cast<int64_t>(e.dwOffset) + 8, fe.offset))
+        if (virtualDrop)
+            fe.offset = 0;
+        else if (AddI64Overflow(resolvedBase, static_cast<int64_t>(e.dwOffset) + 8, fe.offset))
             continue;
+        fe.paletteStep = explicitPalette[streamIdx] ? int(n) : -1;
         fe.size = e.dwSize;
         fe.isKeyframe = (e.dwFlags & avi::kAVIIF_KEYFRAME) != 0;
         try

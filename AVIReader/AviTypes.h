@@ -219,6 +219,8 @@ struct FrameIndexEntry
     int64_t  offset;     ///< Absolute file offset of compressed frame data.
     uint32_t size;       ///< Size of compressed frame data in bytes.
     bool     isKeyframe; ///< True if this is a keyframe / sync point.
+    int64_t  paletteOffset = -1; ///< Physical palette anchor for a virtual drop.
+    int      paletteStep = -1;   ///< Explicit classic palette sequence, or physical order.
 };
 
 // ---------------------------------------------------------------------------

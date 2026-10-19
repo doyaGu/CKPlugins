@@ -130,7 +130,7 @@ private:
     /// Build the frame index. Tries OpenDML, idx1, then the movi chunks.
     bool BuildIndex();
 
-    /// Recover a classic AVI index from the first movi list, including rec lists.
+    /// Scan all AVI/AVIX movie chunks; an empty scan can precede a virtual timeline.
     bool BuildMoviIndex();
     bool ScanMoviList(const RiffReader::Chunk &list);
     bool ScanPaletteList(const RiffReader::Chunk &list);
@@ -165,6 +165,15 @@ private:
     };
     PaletteChange *m_PaletteChanges;
     PaletteChange *m_LastPaletteChange;
+    struct PaletteStep
+    {
+        PaletteStep *next;
+        const PaletteChange *change;
+        unsigned sequence;
+        int stream;
+    };
+    PaletteStep *m_PaletteSteps;
+    PaletteStep *m_LastPaletteStep;
 
     // Location of the first 'movi' list (used for idx1 offset base).
     int64_t m_MoviDataOffset; // absolute offset of the first byte after 'movi' form type
