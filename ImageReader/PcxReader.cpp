@@ -133,54 +133,55 @@ struct PcxContext
     CKBOOL forceDefaultEga;
     XArray<CKBYTE> fileData;
     CKDWORD srcPos;
+    CKDWORD runRemaining;
+    CKBYTE runValue;
 
     PcxContext() : width(0), height(0), bytesPerScanLine(0),
                    isPlanar1bpp(FALSE), isPacked2bpp(FALSE), isPacked4bpp(FALSE),
                    isIndexed8bpp(FALSE), isTrueColor24(FALSE), isTrueColor32(FALSE),
-                   forceDefaultEga(FALSE), srcPos(0)
+                   forceDefaultEga(FALSE), srcPos(0), runRemaining(0), runValue(0)
     {
         memset(&header, 0, sizeof(header));
     }
 
-    void DecodeScanLine(CKBYTE *out)
+    CKBOOL DecodeScanLine(CKBYTE *out, CKDWORD dataSize)
     {
-        memset(out, 0, bytesPerScanLine);
-        if (!fileData.Begin())
-            return;
-        CKDWORD dataSize = (CKDWORD)fileData.Size();
-
         if (header.encoding == 0)
         {
-            CKDWORD remaining = (srcPos < dataSize) ? (dataSize - srcPos) : 0;
-            CKDWORD toCopy = MinDword(remaining, bytesPerScanLine);
-            if (toCopy)
-                memcpy(out, fileData.Begin() + srcPos, toCopy);
-            srcPos += toCopy;
-            return;
+            if (srcPos > dataSize || bytesPerScanLine > dataSize - srcPos)
+                return FALSE;
+            memcpy(out, fileData.Begin() + srcPos, bytesPerScanLine);
+            srcPos += bytesPerScanLine;
+            return TRUE;
         }
 
         // RLE decoding
         CKDWORD linePos = 0;
-        while (linePos < bytesPerScanLine && srcPos < dataSize)
+        while (linePos < bytesPerScanLine)
         {
-            CKBYTE byte = fileData.Begin()[srcPos++];
-            if ((byte & 0xC0) == 0xC0)
+            if (runRemaining == 0)
             {
-                CKDWORD count = byte & 0x3F;
-                if (count == 0)
-                    count = 1;
                 if (srcPos >= dataSize)
-                    break;
-                CKBYTE value = fileData.Begin()[srcPos++];
-                CKDWORD toWrite = MinDword(count, bytesPerScanLine - linePos);
-                memset(out + linePos, value, toWrite);
-                linePos += toWrite;
+                    return FALSE;
+                CKBYTE byte = fileData.Begin()[srcPos++];
+                runRemaining = 1;
+                runValue = byte;
+                if ((byte & 0xC0) == 0xC0)
+                {
+                    if (srcPos >= dataSize)
+                        return FALSE;
+                    runRemaining = byte & 0x3F;
+                    runValue = fileData.Begin()[srcPos++];
+                    if (runRemaining == 0)
+                        continue;
+                }
             }
-            else
-            {
-                out[linePos++] = byte;
-            }
+            CKDWORD toWrite = MinDword(runRemaining, bytesPerScanLine - linePos);
+            memset(out + linePos, runValue, toWrite);
+            linePos += toWrite;
+            runRemaining -= toWrite;
         }
+        return TRUE;
     }
 };
 
@@ -222,6 +223,9 @@ static int ParsePcxHeader(PcxDataSource &src, PcxContext &ctx)
     if (!(ctx.isPlanar1bpp || ctx.isPacked2bpp || ctx.isPacked4bpp ||
           ctx.isIndexed8bpp || ctx.isTrueColor24 || ctx.isTrueColor32))
         return CKBITMAPERROR_UNSUPPORTEDFILE;
+
+    if (ctx.header.bytesPerLine < (ctx.width * bpp + 7) / 8)
+        return CKBITMAPERROR_FILECORRUPTED;
 
     ctx.forceDefaultEga = (ctx.header.version == 0 || ctx.header.version == 3 ||
                            IsAllZero(ctx.header.colorMap, 48));
@@ -472,6 +476,11 @@ int PCX_Read(void *data, int size, CKBitmapProperties *props)
     delete src;
     src = NULL;
 
+    CKDWORD imageDataSize = (CKDWORD)ctx.fileData.Size();
+    if (ctx.isIndexed8bpp && imageDataSize >= 769 &&
+        ctx.fileData.Begin()[imageDataSize - 769] == 0x0C)
+        imageDataSize -= 769;
+
     // Allocate destination
     CKDWORD dstStride = ctx.width * 4;
     uint64_t dstSize64 = (uint64_t)dstStride * ctx.height;
@@ -505,7 +514,12 @@ int PCX_Read(void *data, int size, CKBitmapProperties *props)
     ctx.srcPos = 0;
     for (CKDWORD y = 0; y < ctx.height; y++)
     {
-        ctx.DecodeScanLine(scanLine.Begin());
+        if (!ctx.DecodeScanLine(scanLine.Begin(), imageDataSize))
+        {
+            delete[] indexPixels;
+            delete[] dstPixels;
+            return CKBITMAPERROR_FILECORRUPTED;
+        }
         CKBYTE *dstRow = dstPixels + y * dstStride;
 
         if (ctx.isIndexed8bpp)
@@ -535,6 +549,13 @@ int PCX_Read(void *data, int size, CKBitmapProperties *props)
         {
             DecodeRowPacked4bpp(ctx, ctx.width, scanLine.Begin(), dstRow);
         }
+    }
+
+    if (ctx.runRemaining != 0)
+    {
+        delete[] indexPixels;
+        delete[] dstPixels;
+        return CKBITMAPERROR_FILECORRUPTED;
     }
 
     // Apply VGA palette for 8bpp
