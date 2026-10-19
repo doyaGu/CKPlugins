@@ -1,4 +1,4 @@
-﻿// ===========================================================================
+// ===========================================================================
 // Msvideo1FrameDecoderTest.cpp -- unit tests for Msvideo1FrameDecoder
 // (Microsoft Video 1 / CRAM, 16bpp).
 // ===========================================================================
@@ -134,7 +134,7 @@ TEST(Msvideo1Decoder, TwoColorBlock)
     // - 2 bytes: color0 (RGB555, bit 15 = 0)
     // - 2 bytes: color1 (RGB555, bit 15 = 0)
     // Decoder: bit=0 -> (0^1)=1 -> color1; bit=1 -> (1^1)=0 -> color0
-    // NOTE: flags=0x0000 triggers end-marker when totalBlocks==0.
+    // flags=0x0000 is a valid all-color1 block; covered by the AVI integration regression.
     auto info = MakeCramInfo(4, 4);
     auto dec = CreateFrameDecoder(info);
     ASSERT_NE(dec, nullptr);
@@ -143,7 +143,7 @@ TEST(Msvideo1Decoder, TwoColorBlock)
     uint16_t c1 = PackRgb555(0, 0, 31); // 0x001F blue
 
     // flags = 0x00FF: bottom 8 bits=1 (color0=red), top 8 bits=0 (color1=blue)
-    // byteA=0xFF (nonzero -> no end marker), byteB=0x00 < 0x80 -> two-color mode
+    // byteA=0xFF, byteB=0x00 < 0x80 selects two-color mode.
     // Rows 0,1 -> red; rows 2,3 -> blue
     uint16_t flags = 0x00FF;
 

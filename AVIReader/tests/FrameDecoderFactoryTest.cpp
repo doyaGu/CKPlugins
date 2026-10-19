@@ -1,4 +1,4 @@
-﻿// ===========================================================================
+// ===========================================================================
 // FrameDecoderFactoryTest.cpp -- tests for CreateFrameDecoder() factory.
 // ===========================================================================
 
@@ -148,10 +148,10 @@ TEST(FrameDecoderFactory, Rle8WrongBppReturnsNull)
     EXPECT_EQ(dec, nullptr);
 }
 
-TEST(FrameDecoderFactory, CramWrongBppReturnsNull)
+TEST(FrameDecoderFactory, CramUnsupportedBppReturnsNull)
 {
-    // CRAM decoder requires 16bpp
-    auto info = MakeVideoStreamInfo(avi::kCodec_CRAM, 4, 4, 8);
+    // Video1 supports indexed8 and RGB55516, not24-bit compressed blocks.
+    auto info = MakeVideoStreamInfo(avi::kCodec_CRAM, 4, 4, 24);
     auto dec = CreateFrameDecoder(info);
     EXPECT_EQ(dec, nullptr);
 }

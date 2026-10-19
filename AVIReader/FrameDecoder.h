@@ -45,6 +45,9 @@ public:
 
     /// True if this decoder requires sequential decode order.
     virtual bool NeedsSequentialFrames() const { return false; }
+
+    /// Returns true when an indexed decoder's table changes and history needs replay.
+    virtual bool SetPalette(const uint32_t *colors) { return false; }
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +74,7 @@ public:
     explicit RawFrameDecoder(const avi::AviStreamInfo &info);
 
     FRAMEDECODER_DECODE_OVERRIDE;
+    bool SetPalette(const uint32_t *colors) override;
 
 private:
     int m_SrcBpp;
@@ -79,7 +83,7 @@ private:
     uint32_t m_GreenMask;
     uint32_t m_BlueMask;
     uint32_t m_AlphaMask;
-    std::vector<uint32_t> m_Palette;
+    uint32_t m_Palette[256];
 };
 
 /// Decodes MJPEG frames using stb_image, outputs 32bpp ARGB bottom-up.
@@ -120,10 +124,11 @@ public:
     explicit Rle8FrameDecoder(const avi::AviStreamInfo &info);
 
     FRAMEDECODER_DECODE_OVERRIDE;
+    bool SetPalette(const uint32_t *colors) override;
 
 private:
     bool m_SrcTopDown;
-    std::vector<uint32_t> m_Palette;
+    uint32_t m_Palette[256];
 };
 
 /// Decodes BI_RLE4 streams (4bpp indexed) to 32bpp ARGB bottom-up.
@@ -133,10 +138,11 @@ public:
     explicit Rle4FrameDecoder(const avi::AviStreamInfo &info);
 
     FRAMEDECODER_DECODE_OVERRIDE;
+    bool SetPalette(const uint32_t *colors) override;
 
 private:
     bool m_SrcTopDown;
-    std::vector<uint32_t> m_Palette;
+    uint32_t m_Palette[256];
 };
 
 /// Decodes packed YUV 4:2:2 streams (YUY2/UYVY) to 32bpp ARGB bottom-up.
@@ -156,7 +162,12 @@ private:
 class Msvideo1FrameDecoder : public DeltaFrameDecoder
 {
 public:
+    explicit Msvideo1FrameDecoder(const avi::AviStreamInfo &info);
     FRAMEDECODER_DECODE_OVERRIDE;
+    bool SetPalette(const uint32_t *colors) override;
+private:
+    int m_SrcBpp;
+    uint32_t m_Palette[256];
 };
 
 #endif // FRAMEDECODER_H

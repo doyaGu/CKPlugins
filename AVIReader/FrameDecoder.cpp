@@ -117,14 +117,23 @@ static void WriteArgb(uint8_t *dst, uint32_t argb)
 
 /// Resolve a palette index to a packed 32bpp ARGB colour.
 /// Falls back to a greyscale value when the palette is empty or the index is out of range.
-static uint32_t ResolvePaletteEntry(const std::vector<uint32_t> &palette, uint8_t index)
+static void InitializeFramePalette(uint32_t *colors, const avi::AviStreamInfo &info)
 {
-    if (!palette.empty() && index < palette.size())
-        return palette[index];
-    return 0xFF000000u |
-           (static_cast<uint32_t>(index) << 16) |
-           (static_cast<uint32_t>(index) << 8)  |
-           index;
+    for (unsigned i = 0; i < 256; ++i)
+        colors[i] = i < info.palette.size() ? info.palette[i] : (0xff000000u | i * 0x010101u);
+}
+
+static bool UpdateFramePalette(uint32_t *current, const uint32_t *colors)
+{
+    if (memcmp(current, colors, 256 * sizeof(uint32_t)) == 0)
+        return false;
+    memcpy(current, colors, 256 * sizeof(uint32_t));
+    return true;
+}
+
+static uint32_t ResolvePaletteEntry(const uint32_t *palette, uint8_t index)
+{
+    return palette[index];
 }
 
 static uint8_t ReadIndexedPixel(const uint8_t *src, int x, int bpp)
@@ -187,11 +196,11 @@ std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info
         return std::make_unique<MjpegFrameDecoder>();
     }
 
-    if (info.codec == avi::kCodec_CRAM || info.codec == avi::kCodec_MSVC || info.codec == avi::kCodec_WHAM)
+    if (info.codec == avi::kCodec_CRAM || info.codec == avi::kCodec_MSVC || info.codec == avi::kCodec_WHAM || info.codec == avi::MakeFourCC('M', 'S', 'V', 'C'))
     {
-        // We currently support the common 16bpp CRAM variant.
-        if (info.bitsPerPixel == 16)
-            return std::make_unique<Msvideo1FrameDecoder>();
+        // Microsoft Video 1 has both indexed 8bpp and RGB555 16bpp variants.
+        if (info.bitsPerPixel == 8 || info.bitsPerPixel == 16)
+            return std::make_unique<Msvideo1FrameDecoder>(info);
         return nullptr;
     }
 
@@ -213,9 +222,9 @@ RawFrameDecoder::RawFrameDecoder(const avi::AviStreamInfo &info)
       m_RedMask(info.redMask),
       m_GreenMask(info.greenMask),
       m_BlueMask(info.blueMask),
-      m_AlphaMask(info.alphaMask),
-      m_Palette(info.palette)
+      m_AlphaMask(info.alphaMask)
 {
+    InitializeFramePalette(m_Palette, info);
     if (m_SrcBpp == 16 && (m_RedMask | m_GreenMask | m_BlueMask) == 0)
     {
         m_RedMask = 0x00007C00u;
@@ -228,6 +237,11 @@ RawFrameDecoder::RawFrameDecoder(const avi::AviStreamInfo &info)
         m_GreenMask = 0x0000FF00u;
         m_BlueMask = 0x000000FFu;
     }
+}
+
+bool RawFrameDecoder::SetPalette(const uint32_t *colors)
+{
+    return UpdateFramePalette(m_Palette, colors);
 }
 
 bool RawFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
@@ -309,9 +323,10 @@ bool RawFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 // ===========================================================================
 
 Rle8FrameDecoder::Rle8FrameDecoder(const avi::AviStreamInfo &info)
-    : m_SrcTopDown(info.videoTopDown),
-      m_Palette(info.palette)
-{}
+    : m_SrcTopDown(info.videoTopDown)
+{
+    InitializeFramePalette(m_Palette, info);
+}
 
 void DeltaFrameDecoder::Reset()
 {
@@ -341,6 +356,11 @@ void DeltaFrameDecoder::CommitFrame(const uint8_t *output, size_t frameBytes)
     memcpy(m_PreviousFrame.data(), output, frameBytes);
 }
 
+bool Rle8FrameDecoder::SetPalette(const uint32_t *colors)
+{
+    return UpdateFramePalette(m_Palette, colors);
+}
+
 bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                               int width, int height,
                               uint8_t *output, int outputStride)
@@ -350,6 +370,7 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
     if (!HasValidOutputStride(width, outputStride))
         return false;
 
+    const bool firstFrame = m_Width != width || m_Height != height || m_PreviousFrame.empty();
     const size_t frameBytes = BeginFrame(output, width, height, outputStride);
     if (frameBytes == 0)
         return false;
@@ -363,6 +384,11 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
         WriteArgb(dst, ResolvePaletteEntry(m_Palette, index));
         return true;
     };
+
+    if (firstFrame)
+        for (int row = 0; row < height; ++row)
+            for (int column = 0; column < width; ++column)
+                WriteArgb(output + size_t(row) * outputStride + size_t(column) * 4, m_Palette[0]);
 
     int x = 0;
     int y = m_SrcTopDown ? (height - 1) : 0;
@@ -446,9 +472,15 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 // ===========================================================================
 
 Rle4FrameDecoder::Rle4FrameDecoder(const avi::AviStreamInfo &info)
-    : m_SrcTopDown(info.videoTopDown),
-      m_Palette(info.palette)
-{}
+    : m_SrcTopDown(info.videoTopDown)
+{
+    InitializeFramePalette(m_Palette, info);
+}
+
+bool Rle4FrameDecoder::SetPalette(const uint32_t *colors)
+{
+    return UpdateFramePalette(m_Palette, colors);
+}
 
 bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                               int width, int height,
@@ -459,6 +491,7 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
     if (!HasValidOutputStride(width, outputStride))
         return false;
 
+    const bool firstFrame = m_Width != width || m_Height != height || m_PreviousFrame.empty();
     const size_t frameBytes = BeginFrame(output, width, height, outputStride);
     if (frameBytes == 0)
         return false;
@@ -472,6 +505,11 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
         WriteArgb(dst, ResolvePaletteEntry(m_Palette, index));
         return true;
     };
+
+    if (firstFrame)
+        for (int row = 0; row < height; ++row)
+            for (int column = 0; column < width; ++column)
+                WriteArgb(output + size_t(row) * outputStride + size_t(column) * 4, m_Palette[0]);
 
     int x = 0;
     int y = m_SrcTopDown ? (height - 1) : 0;
@@ -666,7 +704,7 @@ bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 }
 
 // ===========================================================================
-// Msvideo1FrameDecoder  (Microsoft Video 1 / CRAM, 16bpp)
+// Msvideo1FrameDecoder  (Microsoft Video 1 / CRAM, indexed8 and RGB555)
 // ===========================================================================
 
 /// 5-bit -> 8-bit expansion with bit replication.
@@ -685,6 +723,17 @@ static uint32_t Rgb555ToArgb32(uint16_t c)
     const uint32_t b = Expand5To8(c         & 0x1Fu);
     // ARGB word; in little-endian memory this is B, G, R, A.
     return 0xFF000000u | (r << 16) | (g << 8) | b;
+}
+
+Msvideo1FrameDecoder::Msvideo1FrameDecoder(const avi::AviStreamInfo &info)
+    : m_SrcBpp(info.bitsPerPixel)
+{
+    InitializeFramePalette(m_Palette, info);
+}
+
+bool Msvideo1FrameDecoder::SetPalette(const uint32_t *colors)
+{
+    return UpdateFramePalette(m_Palette, colors);
 }
 
 bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
@@ -739,13 +788,6 @@ bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
             const uint8_t byteA = *p++;
             const uint8_t byteB = *p++;
 
-            // End marker used by some encoders as trailing pad.
-            if (byteA == 0 && byteB == 0 && totalBlocks == 0)
-            {
-                CommitFrame(output, frameBytes);
-                return true;
-            }
-
             // Skip-code: keep current block from previous frame and skip N-1 next blocks.
             if ((byteB & 0xFCu) == 0x84u)
             {
@@ -756,6 +798,37 @@ bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                 if (skipBlocks > totalBlocks)
                     return false;
 
+                blockPtr += 4;
+                continue;
+            }
+
+            if (m_SrcBpp == 8)
+            {
+                uint16_t flags = uint16_t(byteA) | (uint16_t(byteB) << 8);
+                const int colorCount = byteB < 0x80 ? 2 : byteB >= 0x90 ? 8 : 1;
+                uint32_t colors[8];
+                if (colorCount == 1)
+                    colors[0] = m_Palette[byteA];
+                else
+                {
+                    if (end - p < colorCount)
+                        return false;
+                    for (int i = 0; i < colorCount; ++i)
+                        colors[i] = m_Palette[*p++];
+                }
+                for (int y = 0; y < 4; ++y)
+                    for (int x = 0; x < 4; ++x)
+                    {
+                        int index = 0;
+                        if (colorCount > 1)
+                        {
+                            index = (flags & 1u) ^ 1u;
+                            if (colorCount == 8)
+                                index += ((y & 2) << 1) + (x & 2);
+                            flags >>= 1;
+                        }
+                        blockPtr[y * stridePixels + x] = colors[index];
+                    }
                 blockPtr += 4;
                 continue;
             }

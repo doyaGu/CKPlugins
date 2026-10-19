@@ -130,6 +130,21 @@ bool AVIReader::DecodeFramePayload(int frameIndex)
 
 bool AVIReader::DecodeFrameWithDependencies(int frameIndex)
 {
+    const avi::AviStreamInfo *info = m_Demuxer.GetStreamInfo(m_VideoStream);
+    if (info->bitsPerPixel > 0 && info->bitsPerPixel <= 8)
+    {
+        uint32_t colors[256];
+        if (!m_Demuxer.GetFramePalette(m_VideoStream, frameIndex, colors))
+            return false;
+        if (m_Decoder->SetPalette(colors))
+        {
+            // Replay under the requested color table so skipped RLE/Video1
+            // pixels are recolored too, including duplicate palette colors.
+            m_Decoder->Reset();
+            m_LastDecodedFrame = -1;
+        }
+    }
+
     // Resolve a dropped sample to the picture it holds. Leading dropped samples
     // use the first coded picture, as AVIStreamGetFrame does.
     int pictureFrame = frameIndex;

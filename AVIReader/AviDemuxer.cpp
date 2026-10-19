@@ -126,6 +126,7 @@ static bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIn
 
 AviDemuxer::AviDemuxer()
     : m_Open(false),
+      m_PaletteChanges(nullptr), m_LastPaletteChange(nullptr),
       m_MoviDataOffset(0), m_MoviEndOffset(0),
       m_Idx1Offset(0), m_Idx1Size(0)
 {
@@ -161,6 +162,22 @@ bool AviDemuxer::Open(const char *filename)
             Close();
             return false;
         }
+
+        bool indexedVideo = false;
+        for (size_t i = 0; i < m_Streams.size(); ++i)
+            if (m_Streams[i].info.type == avi::kStreamType_vids &&
+                m_Streams[i].info.bitsPerPixel > 0 && m_Streams[i].info.bitsPerPixel <= 8)
+                indexedVideo = true;
+        if (indexedVideo)
+        {
+            RiffReader::Chunk movi;
+            if (!m_Reader.SeekTo(m_MoviDataOffset - 12) || !m_Reader.ReadChunkHeader(movi) ||
+                !ScanPaletteList(movi))
+            {
+                Close();
+                return false;
+            }
+        }
     }
     catch (...)
     {
@@ -174,6 +191,13 @@ bool AviDemuxer::Open(const char *filename)
 
 void AviDemuxer::Close()
 {
+    while (m_PaletteChanges)
+    {
+        PaletteChange *next = m_PaletteChanges->next;
+        delete m_PaletteChanges;
+        m_PaletteChanges = next;
+    }
+    m_LastPaletteChange = nullptr;
     m_Reader.Close();
     m_Open = false;
     m_Streams.clear();
@@ -451,9 +475,10 @@ bool AviDemuxer::ParseStreamList(const RiffReader::Chunk &strlChunk)
                 stream.info.height = (bih.biHeight >= 0) ? bih.biHeight : -bih.biHeight;
                 stream.info.videoTopDown = (bih.biHeight < 0);
                 stream.info.bitsPerPixel = bih.biBitCount;
-                // Prefer biCompression over fccHandler for the codec.
-                if (bih.biCompression != 0)
-                    stream.info.codec = bih.biCompression;
+                // BI_RGB is zero, even when the stream handler is "DIB ".
+                stream.info.codec = bih.biCompression;
+                if (bih.biCompression == avi::kCodec_YUY2 || bih.biCompression == avi::kCodec_UYVY)
+                    stream.info.videoTopDown = true;
             }
             else if (strh.fccType == avi::kStreamType_auds)
             {
@@ -699,6 +724,79 @@ bool AviDemuxer::BuildIndex()
     if (BuildIdx1Index())
         return true;
     return BuildMoviIndex();
+}
+
+bool AviDemuxer::GetFramePalette(int streamIndex, int frameIndex, uint32_t *colors) const
+{
+    const avi::AviStreamInfo *info = GetStreamInfo(streamIndex);
+    const avi::FrameIndexEntry *frame = GetFrameInfo(streamIndex, frameIndex);
+    if (!info || !frame)
+        return false;
+    for (unsigned i = 0; i < 256; ++i)
+        colors[i] = i < info->palette.size() ? info->palette[i] : (0xff000000u | i * 0x010101u);
+    for (const PaletteChange *change = m_PaletteChanges; change; change = change->next)
+    {
+        if (change->offset > frame->offset)
+            break;
+        if (change->stream == streamIndex)
+            memcpy(colors + change->first, change->colors, change->count * sizeof(uint32_t));
+    }
+    return true;
+}
+
+bool AviDemuxer::ScanPaletteList(const RiffReader::Chunk &list)
+{
+    if (!m_Reader.DescendInto(list))
+        return false;
+    const int64_t end = list.dataOffset - 4 + list.size;
+    while (m_Reader.Tell() < end)
+    {
+        RiffReader::Chunk child;
+        if (!m_Reader.ReadChunkHeader(child))
+            return false;
+        if (child.IsList() && child.listType == avi::kFourCC_rec)
+        {
+            if (!ScanPaletteList(child))
+                return false;
+        }
+        else if ((child.id >> 16) == ('p' | ('c' << 8)))
+        {
+            const int stream = avi::StreamIndexFromChunkId(child.id);
+            if (stream >= 0 && stream < static_cast<int>(m_Streams.size()) &&
+                m_Streams[stream].info.type == avi::kStreamType_vids &&
+                m_Streams[stream].info.bitsPerPixel > 0 && m_Streams[stream].info.bitsPerPixel <= 8)
+            {
+                uint8_t payload[1028];
+                if (child.size < 4 || child.size > sizeof(payload) || !m_Reader.Read(payload, child.size))
+                    return false;
+                const unsigned first = payload[0];
+                const unsigned count = payload[1] ? payload[1] : 256;
+                if (first + count > 256 || child.size < 4 + count * 4)
+                    return false;
+                PaletteChange *change = new PaletteChange;
+                change->next = nullptr;
+                change->stream = stream;
+                change->offset = child.dataOffset;
+                change->first = first;
+                change->count = count;
+                for (unsigned i = 0; i < count; ++i)
+                {
+                    // AVIPALCHANGE contains PALETTEENTRY (R,G,B,flags), not RGBQUAD.
+                    const uint8_t *rgb = payload + 4 + i * 4;
+                    change->colors[i] = 0xff000000u | (uint32_t(rgb[0]) << 16) |
+                        (uint32_t(rgb[1]) << 8) | rgb[2];
+                }
+                if (m_LastPaletteChange)
+                    m_LastPaletteChange->next = change;
+                else
+                    m_PaletteChanges = change;
+                m_LastPaletteChange = change;
+            }
+        }
+        if (!m_Reader.SkipChunk(child))
+            return false;
+    }
+    return m_Reader.Ascend();
 }
 
 bool AviDemuxer::BuildMoviIndex()

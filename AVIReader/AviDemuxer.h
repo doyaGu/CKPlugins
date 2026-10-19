@@ -76,6 +76,9 @@ public:
     /// Resizes `outData` to the frame's size. Returns true on success.
     bool ReadFrameData(int streamIndex, int frameIndex, std::vector<uint8_t> &outData);
 
+    /// Reconstruct the indexed frame's color table; palette chunks consume no time.
+    bool GetFramePalette(int streamIndex, int frameIndex, uint32_t *colors) const;
+
 private:
     // ------------------------------------------------------------------
     // Internal per-stream bookkeeping
@@ -128,6 +131,7 @@ private:
     /// Recover a classic AVI index from the first movi list, including rec lists.
     bool BuildMoviIndex();
     bool ScanMoviList(const RiffReader::Chunk &list);
+    bool ScanPaletteList(const RiffReader::Chunk &list);
 
     /// Build frame index from classic idx1 chunk.
     bool BuildIdx1Index();
@@ -147,6 +151,16 @@ private:
     bool                     m_Open;
     avi::MainAviHeader       m_MainHeader;
     std::vector<StreamEntry> m_Streams;
+    struct PaletteChange
+    {
+        PaletteChange *next;
+        int stream;
+        int64_t offset;
+        unsigned first, count;
+        uint32_t colors[256];
+    };
+    PaletteChange *m_PaletteChanges;
+    PaletteChange *m_LastPaletteChange;
 
     // Location of the first 'movi' list (used for idx1 offset base).
     int64_t m_MoviDataOffset; // absolute offset of the first byte after 'movi' form type
