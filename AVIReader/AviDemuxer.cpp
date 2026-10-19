@@ -666,7 +666,7 @@ bool AviDemuxer::ParseVideoProperties(const RiffReader::Chunk &chunk, StreamEntr
     layout.height = int(layout.field[0].height);
     if (count == 2)
     {
-        // Signal line numbers identify the field order, not pixel crop offsets.
+        // Without complete broadcast timing, line numbers establish field order only.
         if (layout.field[0].signalY != layout.field[1].signalY)
             layout.firstLine = layout.field[0].signalY < layout.field[1].signalY ? 0 : 1;
         // Crop away the common HSync origin, retaining the fields' relative
@@ -682,7 +682,41 @@ bool AviDemuxer::ParseVideoProperties(const RiffReader::Chunk &chunk, StreamEntr
                 return false;
             layout.width = std::max(layout.width, int(right));
             const int line = i == 0 ? layout.firstLine : 1 - layout.firstLine;
+            f.outputY = line;
             layout.height = std::max(layout.height, line + int(f.height) * 2 - 1);
+        }
+    }
+    if (count == 2)
+    {
+        const uint32_t total = avi::ReadLe32(bytes + 16);
+        const uint32_t canvasHeight = avi::ReadLe32(bytes + 28);
+        const uint32_t first = layout.field[0].signalY, second = layout.field[1].signalY;
+        if ((total == 525 || total == 625) && canvasHeight &&
+            first && first <= total && second && second <= total)
+        {
+            // BT.656-4 field identities: 525 field two wraps through lines 1..3.
+            const int firstPhase = total == 525 ? (first < 4 || first >= 266) : first >= 313;
+            const int secondPhase = total == 525 ? (second < 4 || second >= 266) : second >= 313;
+            if (firstPhase != secondPhase)
+            {
+                if (canvasHeight > 16384)
+                    return false;
+                layout.firstLine = firstPhase;
+                layout.height = int(canvasHeight);
+                // The canonical active canvas starts at line 20 (525) or 23
+                // (625). Keep twice-line positions until subtracting the odd
+                // signal total, preserving the second field's half-line phase.
+                const int origin = total == 525 ? 40 : 46;
+                for (unsigned i = 0; i < 2; ++i)
+                {
+                    AviVideoField &f = layout.field[i];
+                    const int phase = i == 0 ? firstPhase : secondPhase;
+                    int position = int(f.signalY) * 2;
+                    if (phase)
+                        position += total == 525 && f.signalY < 4 ? int(total) : -int(total);
+                    f.outputY = position - origin;
+                }
+            }
         }
     }
     stream.info.videoLayout = layout;

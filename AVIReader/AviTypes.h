@@ -11,13 +11,14 @@ struct AviVideoField
     uint32_t height = 0, width = 0, x = 0, y = 0;
     uint32_t signalX = 0, signalY = 0;
     unsigned outputX = 0;
+    int outputY = 0; // Top-down row of the valid field origin; may precede the canvas.
 };
 
 struct AviVideoLayout
 {
     unsigned fields = 0;
     int width = 0, height = 0;
-    int firstLine = 1;
+    int firstLine = 1; // Parity of descriptor zero in the encoded interleaved bitmap.
     AviVideoField field[2];
 };
 

@@ -207,10 +207,11 @@ public:
             uint8_t *destination = out + size_t(y) * stride;
             for (int x = 0; x < width; ++x)
                 WriteBgra(destination, x, 0, 0, 0);
-            if (unsigned(topY / int(m_Layout.fields)) >= f.height)
+            const int delta = topY - f.outputY;
+            if (delta < 0 || unsigned(delta / int(m_Layout.fields)) >= f.height)
                 continue;
             const int line = m_Layout.fields == 1 ? 0 : field == 0 ? m_Layout.firstLine : 1 - m_Layout.firstLine;
-            const unsigned sourceY = (f.y + unsigned(topY / int(m_Layout.fields))) * m_Layout.fields + line;
+            const unsigned sourceY = (f.y + unsigned(delta / int(m_Layout.fields))) * m_Layout.fields + line;
             const uint8_t *source = m_Pixels + (size_t(m_Height - 1 - sourceY) * m_Width + f.x) * 4;
             memcpy(destination + size_t(f.outputX) * 4, source, size_t(f.width) * 4);
         }
@@ -1012,10 +1013,11 @@ static bool DecodeMjpegVideoLayout(const uint8_t *data, size_t size, const AviVi
         uint8_t *dst = out + size_t(y) * stride;
         for (int x = 0; x < width; ++x)
             WriteBgra(dst, x, 0, 0, 0);
-        if (unsigned(topY / layout.fields) >= area.height)
+        const int delta = topY - area.outputY;
+        if (delta < 0 || unsigned(delta / int(layout.fields)) >= area.height)
             continue;
         const unsigned char *picture = second && field != firstField ? second : first;
-        const uint8_t *src = picture + ((size_t(area.y) + topY / layout.fields) * area.compressedWidth + area.x) * 3;
+        const uint8_t *src = picture + ((size_t(area.y) + delta / layout.fields) * area.compressedWidth + area.x) * 3;
         for (unsigned x = 0; x < area.width; ++x)
             WriteBgra(dst, int(area.outputX + x), src[x * 3 + 2], src[x * 3 + 1], src[x * 3]);
     }
