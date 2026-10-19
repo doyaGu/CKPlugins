@@ -654,6 +654,7 @@ int TGA_Read(void *data, int size, CKBitmapProperties *props)
     }
 
     // Fill properties
+    ImageReader::FreeBitmapData(props);
     ImageReader::FillFormatBGRA32(props->m_Format, (int)ctx.width, (int)ctx.height, (int)dstStride, dstPixels);
     props->m_Data = dstPixels;
 

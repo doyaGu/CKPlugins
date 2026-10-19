@@ -202,17 +202,18 @@ public:
         return (CKWORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
     }
 
-    // Free image data associated with properties.
-    // Ownership rules (mirroring original behavior):
-    // - If m_Data is non-null, it owns the allocation backing the image (and potentially other sub-pointers).
-    // - Otherwise, m_Format.Image may own an allocation.
+    // m_Data owns the decoded allocation. Image may alias it or be a separate
+    // borrowed view; neither that separate view nor ColorMap is owned here.
     static void FreeBitmapData(CKBitmapProperties *props)
     {
         if (!props)
             return;
 
-        if (props->m_Data)
+        if (props->m_Data) {
+            if (props->m_Format.Image == props->m_Data)
+                props->m_Format.Image = NULL;
             delete[] static_cast<CKBYTE *>(props->m_Data);
+        }
 
         props->m_Data = NULL;
     }

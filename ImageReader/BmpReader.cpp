@@ -887,6 +887,7 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
     }
 
     // Fill properties
+    ImageReader::FreeBitmapData(props);
     ImageReader::FillFormatBGRA32(props->m_Format, (int)hdr.width, (int)hdr.height, (int)dstStride, dstPixels);
     props->m_Data = dstPixels;
     return 0;

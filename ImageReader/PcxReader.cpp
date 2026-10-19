@@ -366,6 +366,7 @@ static void ApplyIndexedPalette(CKDWORD width, CKDWORD height, CKDWORD stride,
 PcxReader::PcxReader() : ImageReader()
 {
     m_Properties.Init(PCXREADER_GUID, "pcx");
+    m_DefaultProperties.Init(PCXREADER_GUID, "pcx");
 }
 
 PcxReader::~PcxReader()
@@ -416,6 +417,21 @@ int PcxReader::SaveMemory(void **memory, CKBitmapProperties *bp)
     if (memory && bp)
         *memory = NULL;
     return 0;
+}
+
+void PcxReader::GetBitmapDefaultProperties(CKBitmapProperties **bp)
+{
+    if (bp)
+        *bp = &m_DefaultProperties;
+}
+
+void PcxReader::SetBitmapDefaultProperties(CKBitmapProperties *bp)
+{
+    if (!bp || bp->m_Size < sizeof(PcxBitmapProperties))
+        return;
+    PcxBitmapProperties *properties = static_cast<PcxBitmapProperties *>(bp);
+    m_DefaultProperties.m_BitDepth = properties->m_BitDepth;
+    m_DefaultProperties.m_UseRLE = properties->m_UseRLE;
 }
 
 //=============================================================================
@@ -531,6 +547,7 @@ int PCX_Read(void *data, int size, CKBitmapProperties *props)
     }
 
     // Fill properties
+    ImageReader::FreeBitmapData(props);
     ImageReader::FillFormatBGRA32(props->m_Format, (int)ctx.width, (int)ctx.height, (int)dstStride, dstPixels);
     props->m_Data = dstPixels;
     return 0;

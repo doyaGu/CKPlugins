@@ -20,6 +20,7 @@
  *   - vtable: 4 bytes (offset 0)
  *   - m_Properties: 80 bytes (PcxBitmapProperties, offset 4)
  *   - Total: 84 bytes (0x54)
+ * The portable reader keeps default properties separate from decoded pixels.
  *
  * Based on reverse-engineering of the original ImageReader.dll
  */
@@ -36,6 +37,8 @@ public:
         return (CK_DATAREADER_FLAGS)(CK_DATAREADER_FILELOAD | CK_DATAREADER_MEMORYLOAD);
     }
     virtual CKBOOL IsAlphaSaved(CKBitmapProperties *bp);
+    virtual void GetBitmapDefaultProperties(CKBitmapProperties **bp);
+    virtual void SetBitmapDefaultProperties(CKBitmapProperties *bp);
 
     // Override to match original binary behavior
     virtual int ReadFile(CKSTRING filename, CKBitmapProperties **bp);
@@ -47,6 +50,7 @@ private:
     // Extended properties (80 bytes) stored inline
     // m_Size = 80, m_BitDepth at offset 72, m_UseRLE at offset 76
     PcxBitmapProperties m_Properties;
+    PcxBitmapProperties m_DefaultProperties;
 };
 
 //=============================================================================
