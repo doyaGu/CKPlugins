@@ -32,6 +32,9 @@ public:
     virtual CKPluginInfo *GetReaderInfo();
     virtual int GetOptionsCount();
     virtual CKSTRING GetOptionDescription(int i);
+    virtual CK_DATAREADER_FLAGS GetFlags() {
+        return (CK_DATAREADER_FLAGS)(CK_DATAREADER_FILELOAD | CK_DATAREADER_MEMORYLOAD);
+    }
     virtual CKBOOL IsAlphaSaved(CKBitmapProperties *bp);
 
     // Override to match original binary behavior
