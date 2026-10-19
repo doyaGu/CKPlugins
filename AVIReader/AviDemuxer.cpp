@@ -12,6 +12,7 @@ constexpr uint32_t kMaxIdx1Entries = 4000000u;
 constexpr uint32_t kMaxSuperIndexEntries = 262144u;
 constexpr uint32_t kMaxStdIndexEntries = 1000000u;
 constexpr size_t kMaxFramesPerStream = 4000000u;
+constexpr uint8_t kAviIndexTimedChunks = 0x02;
 
 static bool MulSizeOverflow(size_t a, size_t b, size_t &out)
 {
@@ -173,6 +174,7 @@ void AviDemuxer::Close()
     while (m_PaletteIndexes)
     {
         PaletteIndex *next = m_PaletteIndexes->next;
+        ClearTimedPalette(*m_PaletteIndexes);
         delete[] m_PaletteIndexes->changes;
         delete m_PaletteIndexes;
         m_PaletteIndexes = next;
@@ -765,6 +767,7 @@ bool AviDemuxer::ParseStreamIndex(const RiffReader::Chunk &chunk, StreamEntry &s
         index->offset = chunk.dataOffset - 8;
         index->changes = nullptr;
         index->count = 0;
+        index->steps = index->lastStep = nullptr;
         m_PaletteIndexes = index;
         return true;
     }
@@ -849,7 +852,7 @@ struct AviPhysicalIndex
     ~AviPhysicalIndex() { delete[] frames; delete[] seen; }
 };
 
-static bool MatchesPhysicalIndex(const avi::FrameIndexEntry *entries, size_t count,
+static bool MatchesPhysicalIndex(avi::FrameIndexEntry *entries, size_t count,
                                  AviPhysicalIndex &physical, bool mustUse, uint32_t declaredCount)
 {
     if (!count || (mustUse && declaredCount && count != declaredCount))
@@ -859,7 +862,7 @@ static bool MatchesPhysicalIndex(const avi::FrameIndexEntry *entries, size_t cou
     bool virtualDrop = false;
     for (size_t i = 0; i < count; ++i)
     {
-        const avi::FrameIndexEntry &frame = entries[i];
+        avi::FrameIndexEntry &frame = entries[i];
         if (!frame.offset && !frame.size)
         {
             virtualDrop = true;
@@ -874,8 +877,17 @@ static bool MatchesPhysicalIndex(const avi::FrameIndexEntry *entries, size_t cou
             else
                 high = middle;
         }
-        if (low == physical.count || physical.frames[low].offset != frame.offset ||
-            physical.frames[low].size != frame.size || (!mustUse && physical.seen[low]))
+        const bool physicalMatch = low < physical.count && physical.frames[low].offset == frame.offset &&
+            physical.frames[low].size == frame.size;
+        if (!physicalMatch && frame.zeroOffsetEmpty)
+        {
+            // A zero/zero entry can hold time even with a nonzero index base.
+            // Preserve a real same-stream empty chunk at that base if present.
+            frame.offset = 0;
+            virtualDrop = true;
+            continue;
+        }
+        if (!physicalMatch || (!mustUse && physical.seen[low]))
             return false;
         physical.seen[low] = 1;
     }
@@ -972,11 +984,11 @@ bool AviDemuxer::GetFramePalette(int streamIndex, int frameIndex, uint32_t *colo
         return false;
     for (unsigned i = 0; i < 256; ++i)
         colors[i] = i < info->palette.size() ? info->palette[i] : (0xff000000u | i * 0x010101u);
+    const unsigned visibleColors = info->bitsPerPixel > 0 && info->bitsPerPixel <= 8 ?
+        1u << info->bitsPerPixel : 256;
     if (frame->paletteStep >= 0)
     {
         bool valid = true;
-        const unsigned visibleColors = info->bitsPerPixel > 0 && info->bitsPerPixel <= 8 ?
-            1u << info->bitsPerPixel : 256;
         for (const PaletteStep *step = m_PaletteSteps; step; step = step->next)
         {
             if (step->sequence > unsigned(frame->paletteStep))
@@ -998,8 +1010,25 @@ bool AviDemuxer::GetFramePalette(int streamIndex, int frameIndex, uint32_t *colo
     const int64_t anchor = frame->paletteOffset >= 0 ? frame->paletteOffset : frame->offset;
     for (const PaletteIndex *index = m_PaletteIndexes; index; index = index->next)
     {
-        if (index->stream != streamIndex || !index->changes)
+        if (index->stream != streamIndex || (!index->changes && !index->steps))
             continue;
+        if (index->steps)
+        {
+            bool valid = true;
+            for (const TimedPaletteStep *step = index->steps; step && step->tick <= uint64_t(frameIndex); step = step->next)
+            {
+                const PaletteChange *change = step->change;
+                if (!change)
+                    valid = false;
+                else
+                {
+                    memcpy(colors + change->first, change->colors, change->count * sizeof(uint32_t));
+                    if (change->first == 0 && change->count >= visibleColors)
+                        valid = true;
+                }
+            }
+            return valid;
+        }
         // An untimed palette index locates events; physical movi positions
         // bind them to samples. It does not timestamp otherwise virtual slots.
         for (size_t i = 0; i < index->count && index->changes[i]->offset <= anchor; ++i)
@@ -1088,57 +1117,83 @@ bool AviDemuxer::BuildPaletteIndexes()
         for (PaletteChange *p = m_PaletteChanges; p; p = p->next)
             if (p->stream == index->stream)
                 ++count;
-        if (!count)
-            continue;
-        PaletteChange **changes = new (std::nothrow) PaletteChange *[count];
-        unsigned char *seen = new (std::nothrow) unsigned char[count];
-        if (!changes || !seen)
+        struct Scratch
         {
-            delete[] changes;
-            delete[] seen;
-            return false;
+            PaletteChange **changes = nullptr;
+            unsigned char *seen = nullptr;
+            ~Scratch() { delete[] changes; delete[] seen; }
+        } scratch;
+        if (count)
+        {
+            scratch.changes = new (std::nothrow) PaletteChange *[count];
+            scratch.seen = new (std::nothrow) unsigned char[count];
         }
+        if (count && (!scratch.changes || !scratch.seen))
+            return false;
         size_t used = 0;
         for (PaletteChange *p = m_PaletteChanges; p; p = p->next)
             if (p->stream == index->stream)
-                changes[used++] = p;
-        memset(seen, 0, count);
+                scratch.changes[used++] = p;
+        if (count)
+            memset(scratch.seen, 0, count);
         used = 0;
-        const bool valid = ParsePaletteIndex(index->offset, index->stream, changes, seen, count, used, true);
-        delete[] seen;
-        if (valid && used == count)
+        int type = -1;
+        uint64_t tick = 0;
+        const bool valid = ParsePaletteIndex(index->offset, *index, scratch.changes, scratch.seen,
+                                            count, used, type, tick, true);
+        if (valid && type == avi::kAVI_INDEX_OF_CHUNKS && count && used == count)
         {
-            index->changes = changes;
+            index->changes = scratch.changes;
+            scratch.changes = nullptr;
             index->count = count;
         }
-        else
-            delete[] changes; // Optional incomplete/bad lists fall back to real movi events.
+        else if (!valid)
+            ClearTimedPalette(*index); // Malformed/mixed optional lists have no reliable clock.
     }
     return true;
 }
 
-bool AviDemuxer::ParsePaletteIndex(int64_t offset, int stream, PaletteChange **changes,
-                                  unsigned char *seen, size_t count, size_t &used, bool allowSuper)
+void AviDemuxer::ClearTimedPalette(PaletteIndex &index)
+{
+    while (index.steps)
+    {
+        TimedPaletteStep *next = index.steps->next;
+        delete index.steps;
+        index.steps = next;
+    }
+    index.lastStep = nullptr;
+}
+
+bool AviDemuxer::ParsePaletteIndex(int64_t offset, PaletteIndex &index, PaletteChange **changes,
+                                  unsigned char *seen, size_t count, size_t &used,
+                                  int &type, uint64_t &tick, bool allowSuper)
 {
     uint8_t header[32];
     if (!m_Reader.ReadAt(offset, header, sizeof(header)))
         return false;
     const uint32_t id = avi::ReadLe32(header);
     const uint32_t size = avi::ReadLe32(header + 4);
-    const uint32_t ixId = avi::MakeFourCC('i', 'x', char('0' + stream / 10), char('0' + stream % 10));
-    const uint32_t pcId = avi::MakeFourCC(char('0' + stream / 10), char('0' + stream % 10), 'p', 'c');
+    const uint32_t ixId = avi::MakeFourCC('i', 'x', char('0' + index.stream / 10), char('0' + index.stream % 10));
+    const uint32_t pcId = avi::MakeFourCC(char('0' + index.stream / 10), char('0' + index.stream % 10), 'p', 'c');
     if ((id != avi::kFourCC_indx && id != ixId) || size < 24 ||
         uint64_t(offset) + 8u + size > uint64_t(m_Reader.FileSize()) ||
         header[10] != 0 || avi::ReadLe32(header + 16) != pcId)
         return false;
     const uint32_t entries = avi::ReadLe32(header + 12);
     const bool super = header[11] == avi::kAVI_INDEX_OF_INDEXES;
-    const unsigned stride = super ? 16 : 8;
-    if (avi::ReadLe16(header + 8) != (super ? 4 : 2) ||
-        (!super && header[11] != avi::kAVI_INDEX_OF_CHUNKS) ||
+    const bool timed = header[11] == kAviIndexTimedChunks;
+    const unsigned stride = super ? 16 : timed ? 12 : 8;
+    if (avi::ReadLe16(header + 8) != stride / 4 ||
+        (!super && !timed && header[11] != avi::kAVI_INDEX_OF_CHUNKS) ||
         (super && !allowSuper) || entries > (size - 24) / stride ||
         entries > (super ? kMaxSuperIndexEntries : kMaxStdIndexEntries))
         return false;
+    if (!super)
+    {
+        if (type != -1 && type != header[11])
+            return false; // Untimed children cannot be assigned invented tick spans.
+        type = header[11];
+    }
     const uint64_t base = avi::ReadLe64(header + 20);
     for (uint32_t i = 0; i < entries; ++i)
     {
@@ -1150,16 +1205,19 @@ bool AviDemuxer::ParsePaletteIndex(int64_t offset, int stream, PaletteChange **c
             const uint64_t child = avi::ReadLe64(entry);
             if (!child && !avi::ReadLe32(entry + 8))
                 continue;
+            const uint64_t before = tick;
             if (child > uint64_t(std::numeric_limits<int64_t>::max()) ||
-                !ParsePaletteIndex(int64_t(child), stream, changes, seen, count, used, false))
+                !ParsePaletteIndex(int64_t(child), index, changes, seen, count, used, type, tick, false))
+                return false;
+            const uint32_t duration = avi::ReadLe32(entry + 12);
+            if (type == kAviIndexTimedChunks && duration && duration != tick - before)
                 return false;
         }
         else
         {
             const uint32_t relative = avi::ReadLe32(entry);
-            if (base > uint64_t(std::numeric_limits<int64_t>::max()) - relative)
-                return false;
-            const int64_t position = int64_t(base + relative);
+            const bool positionValid = base <= uint64_t(std::numeric_limits<int64_t>::max()) - relative;
+            const int64_t position = positionValid ? int64_t(base + relative) : -1;
             size_t low = 0, high = count;
             while (low < high)
             {
@@ -1169,10 +1227,30 @@ bool AviDemuxer::ParsePaletteIndex(int64_t offset, int stream, PaletteChange **c
                 else
                     high = middle;
             }
-            if (low == count || changes[low]->offset != position || seen[low] ||
-                changes[low]->size != (avi::ReadLe32(entry + 4) & 0x7fffffffu))
-                return false;
-            seen[low] = 1;
+            const PaletteChange *change = low < count && changes[low]->offset == position &&
+                changes[low]->size == (avi::ReadLe32(entry + 4) & 0x7fffffffu) ? changes[low] : nullptr;
+            if (timed)
+            {
+                const uint32_t duration = avi::ReadLe32(entry + 8);
+                if (used >= kMaxFramesPerStream || duration > std::numeric_limits<uint64_t>::max() - tick)
+                    return false;
+                TimedPaletteStep *step = new TimedPaletteStep;
+                step->next = nullptr;
+                step->change = change; // Keep a readable bad reference's tick, marking its state unknown.
+                step->tick = tick;
+                if (index.lastStep)
+                    index.lastStep->next = step;
+                else
+                    index.steps = step;
+                index.lastStep = step;
+                tick += duration;
+            }
+            else
+            {
+                if (!change || seen[low])
+                    return false;
+                seen[low] = 1;
+            }
             ++used;
         }
     }
@@ -1584,6 +1662,7 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
         if (AddI64Overflow(baseOffset, static_cast<int64_t>(e.dwOffset), fe.offset))
             return false;
         fe.size = frameSize; // mask off not-keyframe flag
+        fe.zeroOffsetEmpty = e.dwOffset == 0 && frameSize == 0;
         fe.isKeyframe = (e.dwSize & 0x80000000u) == 0; // bit 31 set = NOT keyframe
 
         if (fe.offset < 0)

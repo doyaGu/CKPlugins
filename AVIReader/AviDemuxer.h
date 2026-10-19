@@ -167,6 +167,12 @@ private:
     };
     PaletteChange *m_PaletteChanges;
     PaletteChange *m_LastPaletteChange;
+    struct TimedPaletteStep
+    {
+        TimedPaletteStep *next;
+        const PaletteChange *change;
+        uint64_t tick;
+    };
     struct PaletteIndex
     {
         PaletteIndex *next;
@@ -174,10 +180,13 @@ private:
         int64_t offset;
         PaletteChange **changes;
         size_t count;
+        TimedPaletteStep *steps, *lastStep;
     };
     PaletteIndex *m_PaletteIndexes;
-    bool ParsePaletteIndex(int64_t offset, int stream, PaletteChange **changes,
-                           unsigned char *seen, size_t count, size_t &used, bool allowSuper);
+    void ClearTimedPalette(PaletteIndex &index);
+    bool ParsePaletteIndex(int64_t offset, PaletteIndex &index, PaletteChange **changes,
+                           unsigned char *seen, size_t count, size_t &used,
+                           int &type, uint64_t &tick, bool allowSuper);
     struct PaletteStep
     {
         PaletteStep *next;
