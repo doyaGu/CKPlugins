@@ -135,6 +135,7 @@ private:
     bool ScanMoviList(const RiffReader::Chunk &list);
     bool ScanPaletteList(const RiffReader::Chunk &list);
     bool ScanMovieLists(bool palettes);
+    bool BuildPaletteIndexes();
 
     /// Build frame index from classic idx1 chunk.
     bool BuildIdx1Index();
@@ -160,11 +161,23 @@ private:
         PaletteChange *next;
         int stream;
         int64_t offset;
+        uint32_t size;
         unsigned first, count;
         uint32_t colors[256];
     };
     PaletteChange *m_PaletteChanges;
     PaletteChange *m_LastPaletteChange;
+    struct PaletteIndex
+    {
+        PaletteIndex *next;
+        int stream;
+        int64_t offset;
+        PaletteChange **changes;
+        size_t count;
+    };
+    PaletteIndex *m_PaletteIndexes;
+    bool ParsePaletteIndex(int64_t offset, int stream, PaletteChange **changes,
+                           unsigned char *seen, size_t count, size_t &used, bool allowSuper);
     struct PaletteStep
     {
         PaletteStep *next;

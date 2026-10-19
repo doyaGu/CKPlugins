@@ -106,6 +106,7 @@ static bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIn
 AviDemuxer::AviDemuxer()
     : m_Open(false), m_HasAvix(false),
       m_PaletteChanges(nullptr), m_LastPaletteChange(nullptr),
+      m_PaletteIndexes(nullptr),
       m_PaletteSteps(nullptr), m_LastPaletteStep(nullptr),
       m_MoviDataOffset(0), m_MoviEndOffset(0),
       m_Idx1Offset(0), m_Idx1Size(0)
@@ -150,7 +151,7 @@ bool AviDemuxer::Open(const char *filename)
                 return false;
             }
         }
-        if (!BuildIndex())
+        if (!BuildPaletteIndexes() || !BuildIndex())
         {
             Close();
             return false;
@@ -169,6 +170,13 @@ bool AviDemuxer::Open(const char *filename)
 
 void AviDemuxer::Close()
 {
+    while (m_PaletteIndexes)
+    {
+        PaletteIndex *next = m_PaletteIndexes->next;
+        delete[] m_PaletteIndexes->changes;
+        delete m_PaletteIndexes;
+        m_PaletteIndexes = next;
+    }
     while (m_PaletteSteps)
     {
         PaletteStep *next = m_PaletteSteps->next;
@@ -745,7 +753,24 @@ bool AviDemuxer::ParseAudioFormat(const RiffReader::Chunk &chunk, avi::WaveForma
 
 bool AviDemuxer::ParseStreamIndex(const RiffReader::Chunk &chunk, StreamEntry &stream)
 {
+    uint8_t common[12];
+    if (chunk.size >= sizeof(common) && m_Reader.ReadAt(chunk.dataOffset, common, sizeof(common)) &&
+        (avi::ReadLe32(common + 8) >> 16) == ('p' | ('c' << 8)))
+    {
+        // OpenDML puts palette changes in their own index list. It must never
+        // append to, replace, or invalidate the image index of this stream.
+        PaletteIndex *index = new PaletteIndex;
+        index->next = m_PaletteIndexes;
+        index->stream = static_cast<int>(m_Streams.size());
+        index->offset = chunk.dataOffset - 8;
+        index->changes = nullptr;
+        index->count = 0;
+        m_PaletteIndexes = index;
+        return true;
+    }
     if (chunk.size < sizeof(avi::AviSuperIndexHeader))
+        return false;
+    if (!m_Reader.SeekTo(chunk.dataOffset))
         return false;
 
     avi::AviSuperIndexHeader hdr;
@@ -971,6 +996,19 @@ bool AviDemuxer::GetFramePalette(int streamIndex, int frameIndex, uint32_t *colo
         return valid;
     }
     const int64_t anchor = frame->paletteOffset >= 0 ? frame->paletteOffset : frame->offset;
+    for (const PaletteIndex *index = m_PaletteIndexes; index; index = index->next)
+    {
+        if (index->stream != streamIndex || !index->changes)
+            continue;
+        // An untimed palette index locates events; physical movi positions
+        // bind them to samples. It does not timestamp otherwise virtual slots.
+        for (size_t i = 0; i < index->count && index->changes[i]->offset <= anchor; ++i)
+        {
+            const PaletteChange *change = index->changes[i];
+            memcpy(colors + change->first, change->colors, change->count * sizeof(uint32_t));
+        }
+        return true;
+    }
     for (const PaletteChange *change = m_PaletteChanges; change; change = change->next)
     {
         if (change->offset > anchor)
@@ -1014,6 +1052,7 @@ bool AviDemuxer::ScanPaletteList(const RiffReader::Chunk &list)
                 change->next = nullptr;
                 change->stream = stream;
                 change->offset = child.dataOffset;
+                change->size = child.size;
                 change->first = first;
                 change->count = count;
                 for (unsigned i = 0; i < count; ++i)
@@ -1034,6 +1073,110 @@ bool AviDemuxer::ScanPaletteList(const RiffReader::Chunk &list)
             return false;
     }
     return m_Reader.Ascend();
+}
+
+bool AviDemuxer::BuildPaletteIndexes()
+{
+    for (PaletteIndex *index = m_PaletteIndexes; index; index = index->next)
+    {
+        if (index->stream >= static_cast<int>(m_Streams.size()))
+            continue;
+        const avi::AviStreamInfo &info = m_Streams[index->stream].info;
+        if (info.type != avi::kStreamType_vids || info.bitsPerPixel <= 0 || info.bitsPerPixel > 8)
+            continue;
+        size_t count = 0;
+        for (PaletteChange *p = m_PaletteChanges; p; p = p->next)
+            if (p->stream == index->stream)
+                ++count;
+        if (!count)
+            continue;
+        PaletteChange **changes = new (std::nothrow) PaletteChange *[count];
+        unsigned char *seen = new (std::nothrow) unsigned char[count];
+        if (!changes || !seen)
+        {
+            delete[] changes;
+            delete[] seen;
+            return false;
+        }
+        size_t used = 0;
+        for (PaletteChange *p = m_PaletteChanges; p; p = p->next)
+            if (p->stream == index->stream)
+                changes[used++] = p;
+        memset(seen, 0, count);
+        used = 0;
+        const bool valid = ParsePaletteIndex(index->offset, index->stream, changes, seen, count, used, true);
+        delete[] seen;
+        if (valid && used == count)
+        {
+            index->changes = changes;
+            index->count = count;
+        }
+        else
+            delete[] changes; // Optional incomplete/bad lists fall back to real movi events.
+    }
+    return true;
+}
+
+bool AviDemuxer::ParsePaletteIndex(int64_t offset, int stream, PaletteChange **changes,
+                                  unsigned char *seen, size_t count, size_t &used, bool allowSuper)
+{
+    uint8_t header[32];
+    if (!m_Reader.ReadAt(offset, header, sizeof(header)))
+        return false;
+    const uint32_t id = avi::ReadLe32(header);
+    const uint32_t size = avi::ReadLe32(header + 4);
+    const uint32_t ixId = avi::MakeFourCC('i', 'x', char('0' + stream / 10), char('0' + stream % 10));
+    const uint32_t pcId = avi::MakeFourCC(char('0' + stream / 10), char('0' + stream % 10), 'p', 'c');
+    if ((id != avi::kFourCC_indx && id != ixId) || size < 24 ||
+        uint64_t(offset) + 8u + size > uint64_t(m_Reader.FileSize()) ||
+        header[10] != 0 || avi::ReadLe32(header + 16) != pcId)
+        return false;
+    const uint32_t entries = avi::ReadLe32(header + 12);
+    const bool super = header[11] == avi::kAVI_INDEX_OF_INDEXES;
+    const unsigned stride = super ? 16 : 8;
+    if (avi::ReadLe16(header + 8) != (super ? 4 : 2) ||
+        (!super && header[11] != avi::kAVI_INDEX_OF_CHUNKS) ||
+        (super && !allowSuper) || entries > (size - 24) / stride ||
+        entries > (super ? kMaxSuperIndexEntries : kMaxStdIndexEntries))
+        return false;
+    const uint64_t base = avi::ReadLe64(header + 20);
+    for (uint32_t i = 0; i < entries; ++i)
+    {
+        uint8_t entry[16];
+        if (!m_Reader.ReadAt(offset + 32 + int64_t(i) * stride, entry, stride))
+            return false;
+        if (super)
+        {
+            const uint64_t child = avi::ReadLe64(entry);
+            if (!child && !avi::ReadLe32(entry + 8))
+                continue;
+            if (child > uint64_t(std::numeric_limits<int64_t>::max()) ||
+                !ParsePaletteIndex(int64_t(child), stream, changes, seen, count, used, false))
+                return false;
+        }
+        else
+        {
+            const uint32_t relative = avi::ReadLe32(entry);
+            if (base > uint64_t(std::numeric_limits<int64_t>::max()) - relative)
+                return false;
+            const int64_t position = int64_t(base + relative);
+            size_t low = 0, high = count;
+            while (low < high)
+            {
+                const size_t middle = low + (high - low) / 2;
+                if (changes[middle]->offset < position)
+                    low = middle + 1;
+                else
+                    high = middle;
+            }
+            if (low == count || changes[low]->offset != position || seen[low] ||
+                changes[low]->size != (avi::ReadLe32(entry + 4) & 0x7fffffffu))
+                return false;
+            seen[low] = 1;
+            ++used;
+        }
+    }
+    return true;
 }
 
 bool AviDemuxer::ScanMovieLists(bool palettes)
