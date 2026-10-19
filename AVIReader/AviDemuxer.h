@@ -132,6 +132,7 @@ private:
     bool BuildMoviIndex();
     bool ScanMoviList(const RiffReader::Chunk &list);
     bool ScanPaletteList(const RiffReader::Chunk &list);
+    bool ScanMovieLists(bool palettes);
 
     /// Build frame index from classic idx1 chunk.
     bool BuildIdx1Index();
@@ -149,6 +150,7 @@ private:
 
     RiffReader               m_Reader;
     bool                     m_Open;
+    bool                     m_HasAvix;
     avi::MainAviHeader       m_MainHeader;
     std::vector<StreamEntry> m_Streams;
     struct PaletteChange

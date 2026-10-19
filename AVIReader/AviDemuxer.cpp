@@ -125,7 +125,7 @@ static bool ResolveIdx1EntryBaseByHeader(RiffReader &reader, const avi::AviOldIn
 // ===========================================================================
 
 AviDemuxer::AviDemuxer()
-    : m_Open(false),
+    : m_Open(false), m_HasAvix(false),
       m_PaletteChanges(nullptr), m_LastPaletteChange(nullptr),
       m_MoviDataOffset(0), m_MoviEndOffset(0),
       m_Idx1Offset(0), m_Idx1Size(0)
@@ -170,9 +170,7 @@ bool AviDemuxer::Open(const char *filename)
                 indexedVideo = true;
         if (indexedVideo)
         {
-            RiffReader::Chunk movi;
-            if (!m_Reader.SeekTo(m_MoviDataOffset - 12) || !m_Reader.ReadChunkHeader(movi) ||
-                !ScanPaletteList(movi))
+            if (!ScanMovieLists(true))
             {
                 Close();
                 return false;
@@ -200,6 +198,7 @@ void AviDemuxer::Close()
     m_LastPaletteChange = nullptr;
     m_Reader.Close();
     m_Open = false;
+    m_HasAvix = false;
     m_Streams.clear();
     memset(&m_MainHeader, 0, sizeof(m_MainHeader));
     m_MoviDataOffset = 0;
@@ -375,11 +374,20 @@ bool AviDemuxer::ParseRiff()
     if (!m_Reader.Ascend())
         return false;
 
-    // Also scan for RIFF AVIX segments (OpenDML extended AVIs).
-    // These contain additional 'movi' lists but we only need the super-index
-    // (already captured in strl parsing) to locate all frames.
-    // We don't need to explicitly parse them here since BuildOpenDmlIndex
-    // follows the super-index pointers directly.
+    // A classic idx1 only describes the initial RIFF, while palette changes
+    // and recoverable frame chunks can continue in later RIFF AVIX segments.
+    if (!m_Reader.SkipChunk(riffChunk))
+        return false;
+    while (m_Reader.Tell() < m_Reader.FileSize())
+    {
+        RiffReader::Chunk continuation;
+        if (!m_Reader.ReadChunkHeader(continuation))
+            return false;
+        if (continuation.id == avi::kFourCC_RIFF && continuation.listType == avi::kFourCC_AVIX)
+            m_HasAvix = true;
+        if (!m_Reader.SkipChunk(continuation))
+            return false;
+    }
 
     return foundHdrl && foundMovi;
 }
@@ -721,7 +729,7 @@ bool AviDemuxer::BuildIndex()
         // Fall through to idx1 if OpenDML parsing fails.
     }
 
-    if (BuildIdx1Index())
+    if (!m_HasAvix && BuildIdx1Index())
         return true;
     return BuildMoviIndex();
 }
@@ -799,15 +807,47 @@ bool AviDemuxer::ScanPaletteList(const RiffReader::Chunk &list)
     return m_Reader.Ascend();
 }
 
+bool AviDemuxer::ScanMovieLists(bool palettes)
+{
+    if (!m_Reader.SeekTo(0))
+        return false;
+    while (m_Reader.Tell() < m_Reader.FileSize())
+    {
+        RiffReader::Chunk root;
+        if (!m_Reader.ReadChunkHeader(root))
+            return false;
+        if (root.id == avi::kFourCC_RIFF &&
+            (root.listType == avi::kFourCC_AVI || root.listType == avi::kFourCC_AVIX))
+        {
+            if (!m_Reader.DescendInto(root))
+                return false;
+            const int64_t end = root.dataOffset - 4 + root.size;
+            while (m_Reader.Tell() < end)
+            {
+                RiffReader::Chunk child;
+                if (!m_Reader.ReadChunkHeader(child))
+                    return false;
+                if (child.IsList() && child.listType == avi::kFourCC_movi &&
+                    !(palettes ? ScanPaletteList(child) : ScanMoviList(child)))
+                    return false;
+                if (!m_Reader.SkipChunk(child))
+                    return false;
+            }
+            if (!m_Reader.Ascend())
+                return false;
+        }
+        if (!m_Reader.SkipChunk(root))
+            return false;
+    }
+    return true;
+}
+
 bool AviDemuxer::BuildMoviIndex()
 {
     for (size_t i = 0; i < m_Streams.size(); ++i)
         m_Streams[i].index.clear();
 
-    RiffReader::Chunk movi;
-    if (m_MoviDataOffset < 12 || !m_Reader.SeekTo(m_MoviDataOffset - 12) ||
-        !m_Reader.ReadChunkHeader(movi) || !movi.IsList() || movi.listType != avi::kFourCC_movi ||
-        !ScanMoviList(movi))
+    if (!ScanMovieLists(false))
         return false;
 
     for (size_t i = 0; i < m_Streams.size(); ++i)
