@@ -10,6 +10,7 @@ struct AviVideoField
     uint32_t compressedHeight = 0, compressedWidth = 0;
     uint32_t height = 0, width = 0, x = 0, y = 0;
     uint32_t signalX = 0, signalY = 0;
+    unsigned outputX = 0;
 };
 
 struct AviVideoLayout

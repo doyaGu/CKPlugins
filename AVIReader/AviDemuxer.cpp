@@ -669,11 +669,21 @@ bool AviDemuxer::ParseVideoProperties(const RiffReader::Chunk &chunk, StreamEntr
         // Signal line numbers identify the field order, not pixel crop offsets.
         if (layout.field[0].signalY != layout.field[1].signalY)
             layout.firstLine = layout.field[0].signalY < layout.field[1].signalY ? 0 : 1;
-        layout.height += int(layout.field[1].height);
-        if (layout.field[1].width != unsigned(layout.width) ||
-            layout.field[0].height != unsigned((layout.height + 1 - layout.firstLine) / 2) ||
-            layout.field[1].height != unsigned((layout.height + layout.firstLine) / 2))
-            return false;
+        // Crop away the common HSync origin, retaining the fields' relative
+        // horizontal positions. Bitmap crop offsets select source pixels only.
+        const uint32_t origin = std::min(layout.field[0].signalX, layout.field[1].signalX);
+        layout.width = layout.height = 0;
+        for (unsigned i = 0; i < 2; ++i)
+        {
+            AviVideoField &f = layout.field[i];
+            f.outputX = f.signalX - origin;
+            const uint64_t right = uint64_t(f.outputX) + f.width;
+            if (right > uint64_t(std::numeric_limits<int>::max() / 4))
+                return false;
+            layout.width = std::max(layout.width, int(right));
+            const int line = i == 0 ? layout.firstLine : 1 - layout.firstLine;
+            layout.height = std::max(layout.height, line + int(f.height) * 2 - 1);
+        }
     }
     stream.info.videoLayout = layout;
     return true;
