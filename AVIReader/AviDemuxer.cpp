@@ -501,6 +501,12 @@ bool AviDemuxer::ParseStreamList(const RiffReader::Chunk &strlChunk)
             }
             foundStrf = true;
         }
+        else if (child.id == avi::MakeFourCC('v', 'p', 'r', 'p') && foundStrh &&
+                 strh.fccType == avi::kStreamType_vids)
+        {
+            if (!ParseVideoProperties(child, stream))
+                return false;
+        }
         else if (child.id == avi::kFourCC_indx && foundStrh)
         {
             if (!ParseStreamIndex(child, stream))
@@ -624,6 +630,52 @@ bool AviDemuxer::ParseVideoFormat(const RiffReader::Chunk &chunk, avi::BitmapInf
         }
     }
 
+    return true;
+}
+
+bool AviDemuxer::ParseVideoProperties(const RiffReader::Chunk &chunk, StreamEntry &stream)
+{
+    uint8_t bytes[100]; // 36-byte header and up to two 32-byte field descriptors.
+    if (chunk.size < 36 || !m_Reader.Read(bytes, std::min(size_t(chunk.size), sizeof(bytes))))
+        return false;
+    const unsigned count = avi::ReadLe32(bytes + 32);
+    if (count == 0)
+        return true;
+    if (count > 2 || chunk.size < 36 + count * 32)
+        return false;
+    AviVideoLayout layout;
+    layout.fields = count;
+    for (unsigned i = 0; i < count; ++i)
+    {
+        const uint8_t *p = bytes + 36 + i * 32;
+        AviVideoField &f = layout.field[i];
+        f.compressedHeight = avi::ReadLe32(p);
+        f.compressedWidth = avi::ReadLe32(p + 4);
+        f.height = avi::ReadLe32(p + 8);
+        f.width = avi::ReadLe32(p + 12);
+        f.x = avi::ReadLe32(p + 16);
+        f.y = avi::ReadLe32(p + 20);
+        f.signalX = avi::ReadLe32(p + 24);
+        f.signalY = avi::ReadLe32(p + 28);
+        if (!f.width || !f.height || f.compressedWidth > 16384 || f.compressedHeight > 16384 ||
+            f.width > f.compressedWidth || f.height > f.compressedHeight ||
+            f.x > f.compressedWidth - f.width || f.y > f.compressedHeight - f.height)
+            return false;
+    }
+    layout.width = int(layout.field[0].width);
+    layout.height = int(layout.field[0].height);
+    if (count == 2)
+    {
+        // Signal line numbers identify the field order, not pixel crop offsets.
+        if (layout.field[0].signalY != layout.field[1].signalY)
+            layout.firstLine = layout.field[0].signalY < layout.field[1].signalY ? 0 : 1;
+        layout.height += int(layout.field[1].height);
+        if (layout.field[1].width != unsigned(layout.width) ||
+            layout.field[0].height != unsigned((layout.height + 1 - layout.firstLine) / 2) ||
+            layout.field[1].height != unsigned((layout.height + layout.firstLine) / 2))
+            return false;
+    }
+    stream.info.videoLayout = layout;
     return true;
 }
 

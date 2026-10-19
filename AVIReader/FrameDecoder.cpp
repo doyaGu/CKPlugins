@@ -167,7 +167,58 @@ static bool ValidArgs(const uint8_t *data, const uint8_t *output, int width, int
 // Factory
 // ===========================================================================
 
-std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info)
+// Non-JPEG codecs produce an already woven bottom-up raster. Keep their
+// complete history in encoded dimensions, then extract each field's valid area.
+class AviVideoLayoutFrameDecoder : public IFrameDecoder
+{
+public:
+    AviVideoLayoutFrameDecoder(IFrameDecoder *decoder, const avi::AviStreamInfo &info)
+        : m_Decoder(decoder), m_Layout(info.videoLayout), m_Width(info.width), m_Height(info.height) {}
+    ~AviVideoLayoutFrameDecoder() override { delete[] m_Pixels; delete m_Decoder; }
+    void Reset() override { m_Decoder->Reset(); }
+    bool NeedsSequentialFrames() const override { return m_Decoder->NeedsSequentialFrames(); }
+    bool SetPalette(const uint32_t *colors) override { return m_Decoder->SetPalette(colors); }
+    bool Decode(const uint8_t *data, size_t size, int width, int height, uint8_t *out, int stride) override
+    {
+        if (!ValidArgs(data, out, width, height, stride) || !HasValidOutputStride(width, stride) ||
+            width != m_Layout.width || height != m_Layout.height || m_Width <= 0 || m_Width > 16384 ||
+            m_Height <= 0 || m_Height > 16384)
+            return false;
+        for (unsigned i = 0; i < m_Layout.fields; ++i)
+        {
+            const AviVideoField &f = m_Layout.field[i];
+            const int line = m_Layout.fields == 1 ? 0 : i == 0 ? m_Layout.firstLine : 1 - m_Layout.firstLine;
+            const int rows = m_Layout.fields == 1 ? m_Height : (m_Height + 1 - line) / 2;
+            if (f.compressedWidth != unsigned(m_Width) || f.compressedHeight != unsigned(rows))
+                return false;
+        }
+        const size_t bytes = size_t(m_Width) * size_t(m_Height) * 4;
+        if (bytes > 256u * 1024u * 1024u)
+            return false;
+        if (!m_Pixels)
+            m_Pixels = new (std::nothrow) uint8_t[bytes];
+        if (!m_Pixels || !m_Decoder->Decode(data, size, m_Width, m_Height, m_Pixels, m_Width * 4))
+            return false;
+        for (int y = 0; y < height; ++y)
+        {
+            const int topY = height - 1 - y;
+            const unsigned field = m_Layout.fields == 1 ? 0 : (topY & 1) == m_Layout.firstLine ? 0 : 1;
+            const AviVideoField &f = m_Layout.field[field];
+            const int line = m_Layout.fields == 1 ? 0 : field == 0 ? m_Layout.firstLine : 1 - m_Layout.firstLine;
+            const unsigned sourceY = (f.y + unsigned(topY / int(m_Layout.fields))) * m_Layout.fields + line;
+            const uint8_t *source = m_Pixels + (size_t(m_Height - 1 - sourceY) * m_Width + f.x) * 4;
+            memcpy(out + size_t(y) * stride, source, size_t(width) * 4);
+        }
+        return true;
+    }
+private:
+    IFrameDecoder *m_Decoder;
+    AviVideoLayout m_Layout;
+    int m_Width, m_Height;
+    uint8_t *m_Pixels = nullptr;
+};
+
+static std::unique_ptr<IFrameDecoder> CreateStoredFrameDecoder(const avi::AviStreamInfo &info)
 {
     if (info.codec == avi::kCodec_RGB || info.codec == avi::kCodec_BITFIELDS)
     {
@@ -194,7 +245,7 @@ std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info
 
     if (info.codec == avi::kCodec_MJPG || info.codec == avi::kCodec_mjpg)
     {
-        return std::make_unique<MjpegFrameDecoder>();
+        return std::make_unique<MjpegFrameDecoder>(info.videoLayout);
     }
 
     if (info.codec == avi::kCodec_CRAM || info.codec == avi::kCodec_MSVC || info.codec == avi::kCodec_WHAM || info.codec == avi::MakeFourCC('M', 'S', 'V', 'C'))
@@ -211,6 +262,19 @@ std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info
         return std::make_unique<PackedYuv422FrameDecoder>(info.videoTopDown, true);
 
     return nullptr; // unsupported codec
+}
+
+std::unique_ptr<IFrameDecoder> CreateFrameDecoder(const avi::AviStreamInfo &info)
+{
+    IFrameDecoder *decoder = CreateStoredFrameDecoder(info).release();
+    if (decoder && info.videoLayout.fields && info.codec != avi::kCodec_MJPG && info.codec != avi::kCodec_mjpg)
+    {
+        IFrameDecoder *layout = new (std::nothrow) AviVideoLayoutFrameDecoder(decoder, info);
+        if (!layout)
+            delete decoder;
+        decoder = layout;
+    }
+    return std::unique_ptr<IFrameDecoder>(decoder);
 }
 
 // ===========================================================================
@@ -881,6 +945,76 @@ static bool FindMjpegPictureEnd(const uint8_t *data, size_t size, size_t &next, 
     return false;
 }
 
+static bool DecodeMjpegVideoLayout(const uint8_t *data, size_t size, const AviVideoLayout &layout,
+                                   int width, int height, uint8_t *out, int stride)
+{
+    if (width != layout.width || height != layout.height)
+        return false;
+    int firstW = 0, firstH = 0;
+    unsigned char *first = DecodeMjpegPicture(data, size, firstW, firstH);
+    if (!first)
+        return false;
+    unsigned char *second = nullptr;
+    unsigned firstField = 0;
+    if (layout.fields == 2)
+    {
+        size_t next = 0;
+        unsigned polarity = 0;
+        if (!FindMjpegPictureEnd(data, size, next, polarity))
+        {
+            stbi_image_free(first);
+            return false;
+        }
+        firstField = polarity == 2 ? 1 : 0;
+        while (next < size && (data[next] == 0 || data[next] == 255))
+        {
+            if (data[next] == 255 && next + 1 < size && data[next + 1] == 0xd8)
+                break;
+            ++next;
+        }
+        if (next < size)
+        {
+            int secondW = 0, secondH = 0;
+            unsigned secondPolarity = 0;
+            size_t end = 0;
+            if (FindMjpegPictureEnd(data + next, size - next, end, secondPolarity) &&
+                (!secondPolarity || secondPolarity != polarity))
+                second = DecodeMjpegPicture(data + next, size - next, secondW, secondH);
+            const AviVideoField &f = layout.field[1 - firstField];
+            if (!second || unsigned(secondW) != f.compressedWidth || unsigned(secondH) != f.compressedHeight)
+            {
+                stbi_image_free(first);
+                stbi_image_free(second);
+                return false;
+            }
+        }
+    }
+    const AviVideoField &f = layout.field[firstField];
+    if (unsigned(firstW) != f.compressedWidth || unsigned(firstH) != f.compressedHeight ||
+        (!second && layout.fields == 2 &&
+         (layout.field[1 - firstField].compressedWidth != unsigned(firstW) ||
+          layout.field[1 - firstField].compressedHeight != unsigned(firstH))))
+    {
+        stbi_image_free(first);
+        stbi_image_free(second);
+        return false;
+    }
+    for (int y = 0; y < height; ++y)
+    {
+        const int topY = height - 1 - y;
+        const unsigned field = layout.fields == 1 ? 0 : (topY & 1) == layout.firstLine ? 0 : 1;
+        const AviVideoField &area = layout.field[field];
+        const unsigned char *picture = second && field != firstField ? second : first;
+        const uint8_t *src = picture + ((size_t(area.y) + topY / layout.fields) * area.compressedWidth + area.x) * 3;
+        uint8_t *dst = out + size_t(y) * stride;
+        for (int x = 0; x < width; ++x)
+            WriteBgra(dst, x, src[x * 3 + 2], src[x * 3 + 1], src[x * 3]);
+    }
+    stbi_image_free(second);
+    stbi_image_free(first);
+    return true;
+}
+
 bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                                int width, int height,
                                uint8_t *output, int outputStride)
@@ -891,6 +1025,9 @@ bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
         return false;
     if (dataSize > static_cast<size_t>(std::numeric_limits<int>::max()))
         return false;
+
+    if (m_Layout.fields)
+        return DecodeMjpegVideoLayout(data, dataSize, m_Layout, width, height, output, outputStride);
 
     int imgW = 0, imgH = 0;
     unsigned char *pixels = DecodeMjpegPicture(data, dataSize, imgW, imgH);

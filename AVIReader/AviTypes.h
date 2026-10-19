@@ -5,6 +5,21 @@
 #include <cstddef>
 #include <vector>
 
+struct AviVideoField
+{
+    uint32_t compressedHeight = 0, compressedWidth = 0;
+    uint32_t height = 0, width = 0, x = 0, y = 0;
+    uint32_t signalX = 0, signalY = 0;
+};
+
+struct AviVideoLayout
+{
+    unsigned fields = 0;
+    int width = 0, height = 0;
+    int firstLine = 1;
+    AviVideoField field[2];
+};
+
 // ---------------------------------------------------------------------------
 // FourCC helpers
 // ---------------------------------------------------------------------------
@@ -210,6 +225,7 @@ struct FrameIndexEntry
 
 struct AviStreamInfo
 {
+    AviVideoLayout videoLayout;
     uint32_t type;          ///< Stream type FourCC ('vids' / 'auds').
     uint32_t codec;         ///< Video: biCompression / handler FourCC. Audio: wFormatTag.
     int      width;         ///< Video width in pixels (0 for audio).

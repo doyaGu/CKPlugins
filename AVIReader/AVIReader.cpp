@@ -124,7 +124,7 @@ bool AVIReader::DecodeFramePayload(int frameIndex)
         return true;
 
     return m_Decoder->Decode(m_CompressedBuf.data(), m_CompressedBuf.size(),
-                             info->width, info->height,
+                             m_Properties.m_Format.Width, m_Properties.m_Format.Height,
                              m_FrameBuffer.data(), m_OutputStride);
 }
 
@@ -256,8 +256,8 @@ CKERROR AVIReader::OpenFile(CKSTRING name)
         return CKMOVIEERROR_UNSUPPORTEDFILE;
     }
 
-    const int width = info->width;
-    const int height = info->height;
+    const int width = info->videoLayout.fields ? info->videoLayout.width : info->width;
+    const int height = info->videoLayout.fields ? info->videoLayout.height : info->height;
     if (width > INT_MAX / 4)
     {
         ReleaseAll();

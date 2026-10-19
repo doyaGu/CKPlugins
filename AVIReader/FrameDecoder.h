@@ -90,7 +90,10 @@ private:
 class MjpegFrameDecoder : public IFrameDecoder
 {
 public:
+    explicit MjpegFrameDecoder(const AviVideoLayout &layout = AviVideoLayout()) : m_Layout(layout) {}
     FRAMEDECODER_DECODE_OVERRIDE;
+private:
+    AviVideoLayout m_Layout;
 };
 
 // ---------------------------------------------------------------------------

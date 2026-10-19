@@ -116,6 +116,8 @@ private:
     /// Parse a video 'strf' chunk into a BitmapInfoHeader and extra format metadata.
     bool ParseVideoFormat(const RiffReader::Chunk &chunk, avi::BitmapInfoHeader &bih, StreamEntry &stream);
 
+    bool ParseVideoProperties(const RiffReader::Chunk &chunk, StreamEntry &stream);
+
     /// Parse an audio 'strf' chunk into a WaveFormatHeader.
     bool ParseAudioFormat(const RiffReader::Chunk &chunk, avi::WaveFormatHeader &wfh);
 
