@@ -706,7 +706,7 @@ bool AviDemuxer::ParseVideoProperties(const RiffReader::Chunk &chunk, StreamEntr
                 // The canonical active canvas starts at line 20 (525) or 23
                 // (625). Keep twice-line positions until subtracting the odd
                 // signal total, preserving the second field's half-line phase.
-                const int origin = total == 525 ? 40 : 46;
+                int origin = total == 525 ? 40 : 46;
                 for (unsigned i = 0; i < 2; ++i)
                 {
                     AviVideoField &f = layout.field[i];
@@ -714,8 +714,25 @@ bool AviDemuxer::ParseVideoProperties(const RiffReader::Chunk &chunk, StreamEntr
                     int position = int(f.signalY) * 2;
                     if (phase)
                         position += total == 525 && f.signalY < 4 ? int(total) : -int(total);
-                    f.outputY = position - origin;
+                    f.outputY = position;
                 }
+                if (total == 525)
+                {
+                    // vprp does not identify the older NTSC V-blanking revision.
+                    // Retain both valid fields when an even canvas origin can
+                    // do so, choosing the closest origin to the modern default.
+                    const AviVideoField &a = layout.field[0], &b = layout.field[1];
+                    const int bottom = std::max(a.outputY + int(a.height) * 2 - 1,
+                                              b.outputY + int(b.height) * 2 - 1);
+                    int low = bottom - layout.height;
+                    low += low % 2 != 0;
+                    int high = std::min(a.outputY, b.outputY);
+                    high -= high % 2;
+                    if (low <= high)
+                        origin = std::max(low, std::min(origin, high));
+                }
+                for (unsigned i = 0; i < 2; ++i)
+                    layout.field[i].outputY -= origin;
             }
         }
     }
