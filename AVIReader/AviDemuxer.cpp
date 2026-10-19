@@ -248,11 +248,22 @@ int AviDemuxer::GetFrameCount(int streamIndex) const
 
 int AviDemuxer::GetDurationMs(int streamIndex) const
 {
-    const avi::AviStreamInfo *info = GetStreamInfo(streamIndex);
-    if (!info || info->frameRate <= 0.0)
+    if (!GetStreamInfo(streamIndex))
         return 0;
-    const int frames = GetFrameCount(streamIndex);
-    return static_cast<int>((frames / info->frameRate) * 1000.0 + 0.5);
+    const StreamEntry &stream = m_Streams[streamIndex];
+    if (!stream.timeScale || !stream.timeRate)
+        return 0;
+
+    // Keep the stream's rational clock: converting through double FPS can
+    // put an exact half millisecond below the rounding boundary.
+    const uint64_t ticks = uint64_t(GetFrameCount(streamIndex)) * stream.timeScale;
+    const uint64_t seconds = ticks / stream.timeRate;
+    const int maximum = (std::numeric_limits<int>::max)();
+    if (seconds > uint64_t(maximum / 1000))
+        return maximum;
+    const uint64_t milliseconds = seconds * 1000 +
+        ((ticks % stream.timeRate) * 1000 + stream.timeRate / 2) / stream.timeRate;
+    return milliseconds > uint64_t(maximum) ? maximum : int(milliseconds);
 }
 
 const avi::FrameIndexEntry *AviDemuxer::GetFrameInfo(int streamIndex, int frameIndex) const
@@ -466,6 +477,8 @@ bool AviDemuxer::ParseStreamList(const RiffReader::Chunk &strlChunk)
             stream.info.type = strh.fccType;
             stream.info.codec = strh.fccHandler;
             stream.info.totalFrames = strh.dwLength;
+            stream.timeScale = strh.dwScale;
+            stream.timeRate = strh.dwRate;
             if (strh.dwScale > 0)
                 stream.info.frameRate = static_cast<double>(strh.dwRate) / static_cast<double>(strh.dwScale);
         }

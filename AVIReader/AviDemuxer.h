@@ -62,7 +62,7 @@ public:
     /// Number of indexed frames for a given stream.
     int GetFrameCount(int streamIndex) const;
 
-    /// Duration in milliseconds for a given stream (derived from frame rate).
+    /// Relative duration rounded to milliseconds, saturated at INT_MAX.
     int GetDurationMs(int streamIndex) const;
 
     /// Get the index entry for a specific frame. Returns nullptr if invalid.
@@ -86,6 +86,7 @@ private:
     struct StreamEntry
     {
         avi::AviStreamInfo info;
+        uint32_t timeScale, timeRate;
         std::vector<avi::FrameIndexEntry> index;
         std::vector<avi::FrameIndexEntry> headerIndex;
 
@@ -94,7 +95,7 @@ private:
         std::vector<avi::AviSuperIndexEntry> superIndex;
         uint32_t superIndexChunkId; // dwChunkId from indx header
 
-        StreamEntry() : superIndexChunkId(0) {}
+        StreamEntry() : timeScale(0), timeRate(0), superIndexChunkId(0) {}
     };
 
     // ------------------------------------------------------------------
