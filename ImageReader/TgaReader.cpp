@@ -676,20 +676,101 @@ int TGA_Read(void *data, int size, CKBitmapProperties *props)
 //=============================================================================
 // TGA_Save - Core Saving Function
 //=============================================================================
+static CKBOOL TgaEncodeRle(CKBYTE *srcPixels, CKDWORD width, CKDWORD height,
+                           CKDWORD srcStride, int bitDepth, ImageWriterBuffer &out)
+{
+    const CKDWORD dstBpp = bitDepth == 64 ? 1 : bitDepth / 8;
+    CKDWORD totalPixels = width * height;
+    CKDWORD pixelIndex = 0;
+
+    while (pixelIndex < totalPixels)
+    {
+        CKDWORD runStart = pixelIndex;
+        CKDWORD runX = runStart % width;
+        CKDWORD runY = height - 1 - (runStart / width);
+        CKBYTE *startPixel = srcPixels + (size_t)runY * srcStride + runX * 4;
+        CKBYTE startEncoded[4];
+        EncodeSavePixel(startPixel, bitDepth, startEncoded);
+
+        // Find RLE run
+        CKDWORD rleCount = 1;
+        while (rleCount < 128 && (runStart + rleCount) < totalPixels)
+        {
+            CKDWORD nx = (runStart + rleCount) % width;
+            CKDWORD ny = height - 1 - ((runStart + rleCount) / width);
+            CKBYTE *nextPixel = srcPixels + (size_t)ny * srcStride + nx * 4;
+            if (!SavePixelMatches(nextPixel, startEncoded, bitDepth, dstBpp))
+                break;
+            rleCount++;
+        }
+
+        // Find raw run
+        CKDWORD rawCount = 1;
+        if (rleCount < 3)
+        {
+            while (rawCount < 128 && (runStart + rawCount) < totalPixels)
+            {
+                CKDWORD cs = runStart + rawCount;
+                CKDWORD cx = cs % width;
+                CKDWORD cy = height - 1 - (cs / width);
+                CKBYTE *cp = srcPixels + (size_t)cy * srcStride + cx * 4;
+                CKBYTE cpEncoded[4];
+                EncodeSavePixel(cp, bitDepth, cpEncoded);
+
+                CKDWORD sameCount = 1;
+                while (sameCount < 3 && (cs + sameCount) < totalPixels)
+                {
+                    CKDWORD nxx = (cs + sameCount) % width;
+                    CKDWORD nyy = height - 1 - ((cs + sameCount) / width);
+                    CKBYTE *np = srcPixels + (size_t)nyy * srcStride + nxx * 4;
+                    if (!SavePixelMatches(np, cpEncoded, bitDepth, dstBpp))
+                        break;
+                    sameCount++;
+                }
+                if (sameCount >= 3)
+                    break;
+                rawCount++;
+            }
+        }
+
+        CKBYTE packet[513];
+        size_t writePos = 0;
+        if (rleCount >= 3)
+        {
+            packet[writePos++] = (CKBYTE)(0x80 | (rleCount - 1));
+            for (CKDWORD i = 0; i < dstBpp; i++)
+                packet[writePos++] = startEncoded[i];
+            pixelIndex += rleCount;
+        }
+        else
+        {
+            packet[writePos++] = (CKBYTE)(rawCount - 1);
+            for (CKDWORD i = 0; i < rawCount; i++)
+            {
+                CKDWORD px = (runStart + i) % width;
+                CKDWORD py = height - 1 - ((runStart + i) / width);
+                CKBYTE *p = srcPixels + (size_t)py * srcStride + px * 4;
+                CKBYTE encoded[4];
+                EncodeSavePixel(p, bitDepth, encoded);
+                for (CKDWORD j = 0; j < dstBpp; j++)
+                    packet[writePos++] = encoded[j];
+            }
+            pixelIndex += rawCount;
+        }
+        if (!out.Append(packet, writePos))
+            return FALSE;
+    }
+    return TRUE;
+}
+
 int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useRLE)
 {
-    if (!props)
+    if (!props || props->m_Format.Width <= 0 || props->m_Format.Height <= 0)
         return 0;
 
     CKDWORD width = props->m_Format.Width;
     CKDWORD height = props->m_Format.Height;
     if (width > 65535 || height > 65535)
-        return 0;
-    XArray<CKBYTE> converted;
-    CKDWORD srcStride = 0;
-    CKBYTE *srcPixels = ImageReader::GetSavePixels(props, converted, srcStride);
-
-    if (!srcPixels || width == 0 || height == 0)
         return 0;
     if (bitDepth != 16 && bitDepth != 24 && bitDepth != 32 && bitDepth != 64)
         bitDepth = 24;
@@ -697,6 +778,22 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
     CKBOOL isGreyscale = (bitDepth == 64);
     CKDWORD saveBitDepth = isGreyscale ? 8 : (CKDWORD)bitDepth;
     CKDWORD dstBpp = isGreyscale ? 1 : (saveBitDepth / 8);
+
+    uint64_t pixelDataSize = (uint64_t)width * height * dstBpp;
+    if (!useRLE && pixelDataSize > (uint64_t)INT_MAX - sizeof(TGAHEADER))
+        return 0;
+    XArray<CKBYTE> converted;
+    CKDWORD srcStride = 0;
+    CKBYTE *srcPixels = ImageReader::GetSavePixels(props, converted, srcStride);
+    if (!srcPixels)
+        return 0;
+    if (useRLE)
+    {
+        ImageWriterBuffer count(NULL, INT_MAX - sizeof(TGAHEADER));
+        if (!TgaEncodeRle(srcPixels, width, height, srcStride, bitDepth, count))
+            return 0;
+        pixelDataSize = count.Size();
+    }
 
     // Build header
     TGAHEADER header;
@@ -709,93 +806,18 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
     header.pixelDepth = (CKBYTE)saveBitDepth;
     header.imageDescriptor = (bitDepth == 32) ? 8 : 0;
 
-    // Calculate sizes
-    CKDWORD maxPixelDataSize = width * height * dstBpp;
-    if (useRLE)
-        maxPixelDataSize += width * height / 128 + 1;
-    CKDWORD maxFileSize = sizeof(TGAHEADER) + maxPixelDataSize;
-
-    CKBYTE *buffer = new CKBYTE[maxFileSize];
+    const int fileSize = (int)(sizeof(TGAHEADER) + pixelDataSize);
+    CKBYTE *buffer = new CKBYTE[fileSize];
     memcpy(buffer, &header, sizeof(header));
-    CKDWORD writePos = sizeof(header);
+    size_t writePos = sizeof(header);
 
     if (useRLE)
     {
-        CKDWORD totalPixels = width * height;
-        CKDWORD pixelIndex = 0;
-
-        while (pixelIndex < totalPixels)
+        ImageWriterBuffer encoded(buffer + sizeof(header), fileSize - sizeof(header));
+        if (!TgaEncodeRle(srcPixels, width, height, srcStride, bitDepth, encoded))
         {
-            CKDWORD runStart = pixelIndex;
-            CKDWORD runX = runStart % width;
-            CKDWORD runY = height - 1 - (runStart / width);
-            CKBYTE *startPixel = srcPixels + runY * srcStride + runX * 4;
-            CKBYTE startEncoded[4];
-            EncodeSavePixel(startPixel, bitDepth, startEncoded);
-
-            // Find RLE run
-            CKDWORD rleCount = 1;
-            while (rleCount < 128 && (runStart + rleCount) < totalPixels)
-            {
-                CKDWORD nx = (runStart + rleCount) % width;
-                CKDWORD ny = height - 1 - ((runStart + rleCount) / width);
-                CKBYTE *nextPixel = srcPixels + ny * srcStride + nx * 4;
-                if (!SavePixelMatches(nextPixel, startEncoded, bitDepth, dstBpp))
-                    break;
-                rleCount++;
-            }
-
-            // Find raw run
-            CKDWORD rawCount = 1;
-            if (rleCount < 3)
-            {
-                while (rawCount < 128 && (runStart + rawCount) < totalPixels)
-                {
-                    CKDWORD cs = runStart + rawCount;
-                    CKDWORD cx = cs % width;
-                    CKDWORD cy = height - 1 - (cs / width);
-                    CKBYTE *cp = srcPixels + cy * srcStride + cx * 4;
-                    CKBYTE cpEncoded[4];
-                    EncodeSavePixel(cp, bitDepth, cpEncoded);
-
-                    CKDWORD sameCount = 1;
-                    while (sameCount < 3 && (cs + sameCount) < totalPixels)
-                    {
-                        CKDWORD nxx = (cs + sameCount) % width;
-                        CKDWORD nyy = height - 1 - ((cs + sameCount) / width);
-                        CKBYTE *np = srcPixels + nyy * srcStride + nxx * 4;
-                        if (!SavePixelMatches(np, cpEncoded, bitDepth, dstBpp))
-                            break;
-                        sameCount++;
-                    }
-                    if (sameCount >= 3)
-                        break;
-                    rawCount++;
-                }
-            }
-
-            if (rleCount >= 3)
-            {
-                buffer[writePos++] = (CKBYTE)(0x80 | (rleCount - 1));
-                for (CKDWORD i = 0; i < dstBpp; i++)
-                    buffer[writePos++] = startEncoded[i];
-                pixelIndex += rleCount;
-            }
-            else
-            {
-                buffer[writePos++] = (CKBYTE)(rawCount - 1);
-                for (CKDWORD i = 0; i < rawCount; i++)
-                {
-                    CKDWORD px = (runStart + i) % width;
-                    CKDWORD py = height - 1 - ((runStart + i) / width);
-                    CKBYTE *p = srcPixels + py * srcStride + px * 4;
-                    CKBYTE encoded[4];
-                    EncodeSavePixel(p, bitDepth, encoded);
-                    for (CKDWORD j = 0; j < dstBpp; j++)
-                        buffer[writePos++] = encoded[j];
-                }
-                pixelIndex += rawCount;
-            }
+            delete[] buffer;
+            return 0;
         }
     }
     else
@@ -803,7 +825,7 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
         for (CKDWORD y = 0; y < height; y++)
         {
             CKDWORD srcY = height - 1 - y;
-            CKBYTE *srcRow = srcPixels + srcY * srcStride;
+            CKBYTE *srcRow = srcPixels + (size_t)srcY * srcStride;
             for (CKDWORD x = 0; x < width; x++)
             {
                 CKBYTE encoded[4];
@@ -813,9 +835,6 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
             }
         }
     }
-
-    CKDWORD fileSize = writePos;
-
     // Output
     if (*outBuffer)
     {
@@ -833,13 +852,6 @@ int TGA_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth, int useR
     }
     else
     {
-        if (fileSize < maxFileSize)
-        {
-            CKBYTE *final = new CKBYTE[fileSize];
-            memcpy(final, buffer, fileSize);
-            delete[] buffer;
-            buffer = final;
-        }
         *outBuffer = buffer;
     }
     return (int)fileSize;

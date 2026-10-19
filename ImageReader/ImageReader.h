@@ -106,6 +106,31 @@ struct PcxBitmapProperties : public CKBitmapProperties
     CKDWORD m_UseRLE;   // 0x4C (offset 76): Reserved (default 0)
 };
 
+// The same packet encoder first counts bytes, then writes an exactly sized
+// allocation. Capacity includes only the region passed to this cursor.
+class ImageWriterBuffer
+{
+public:
+    ImageWriterBuffer(CKBYTE *data, size_t capacity) : m_Data(data), m_Capacity(capacity), m_Size(0) {}
+
+    CKBOOL Append(const CKBYTE *data, size_t size)
+    {
+        if (size > m_Capacity - m_Size)
+            return FALSE;
+        if (m_Data)
+            memcpy(m_Data + m_Size, data, size);
+        m_Size += size;
+        return TRUE;
+    }
+
+    size_t Size() const { return m_Size; }
+
+private:
+    CKBYTE *m_Data;
+    size_t m_Capacity;
+    size_t m_Size;
+};
+
 // Shared base class for BMP/TGA/PCX readers.
 // Implements common CKBitmapReader glue and SDK-safe memory management.
 // Subclasses must define their own extended m_Properties member.
@@ -210,6 +235,11 @@ public:
         const int64_t pitch = source.BytesPerLine;
         if (rowBytes > INT_MAX || (uint64_t)(pitch < 0 ? -pitch : pitch) <
             (uint64_t)source.Width * (source.BitsPerPixel / 8))
+            return NULL;
+        const uint64_t sourceExtent = (uint64_t)(source.Height - 1) *
+            (uint64_t)(pitch < 0 ? -pitch : pitch) +
+            (uint64_t)source.Width * (source.BitsPerPixel / 8);
+        if (sourceExtent > SIZE_MAX)
             return NULL;
         if (source.BitsPerPixel == 32 && source.ColorMapEntries == 0 &&
             source.RedMask == R_MASK && source.GreenMask == G_MASK &&

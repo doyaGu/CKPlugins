@@ -519,48 +519,31 @@ static int ParseBmpHeader(BmpDataSource &src, BmpHeader &hdr)
 //=============================================================================
 // RLE8 Encoding (for save)
 //=============================================================================
-namespace RLE8
+static CKBYTE BmpSaveGray(const CKBYTE *row, CKDWORD x)
 {
-    static void EmitEncoded(XArray<CKBYTE> &out, CKBYTE count, CKBYTE value)
-    {
-        out.PushBack(count);
-        out.PushBack(value);
-    }
+    const CKBYTE *pixel = row + (size_t)x * 4;
+    return ImageReader::ToGray(pixel[0], pixel[1], pixel[2]);
+}
 
-    static void EmitAbsolute(XArray<CKBYTE> &out, const CKBYTE *values, CKDWORD count)
+static CKBOOL BmpEncodeRle8(const CKBYTE *pixels, CKDWORD width, CKDWORD height,
+                           CKDWORD stride, ImageWriterBuffer &out)
+{
+    for (CKDWORD y = 0; y < height; y++)
     {
-        out.PushBack(0);
-        out.PushBack((CKBYTE)count);
-        for (CKDWORD i = 0; i < count; i++)
-            out.PushBack(values[i]);
-        if (count & 1)
-            out.PushBack(0);
-    }
-
-    static void EmitEOL(XArray<CKBYTE> &out)
-    {
-        out.PushBack(0);
-        out.PushBack(0);
-    }
-    static void EmitEOB(XArray<CKBYTE> &out)
-    {
-        out.PushBack(0);
-        out.PushBack(1);
-    }
-
-    static void EncodeRow(const CKBYTE *row, CKDWORD width, XArray<CKBYTE> &out)
-    {
+        const CKBYTE *row = pixels + (size_t)(height - 1 - y) * stride;
         CKDWORD x = 0;
         while (x < width)
         {
-            CKBYTE v = row[x];
+            CKBYTE v = BmpSaveGray(row, x);
             CKDWORD runLen = 1;
-            while (x + runLen < width && runLen < 255 && row[x + runLen] == v)
+            while (x + runLen < width && runLen < 255 && BmpSaveGray(row, x + runLen) == v)
                 runLen++;
 
             if (runLen >= 2)
             {
-                EmitEncoded(out, (CKBYTE)runLen, v);
+                const CKBYTE packet[] = {(CKBYTE)runLen, v};
+                if (!out.Append(packet, sizeof(packet)))
+                    return FALSE;
                 x += runLen;
                 continue;
             }
@@ -568,19 +551,38 @@ namespace RLE8
             CKDWORD litLen = 1;
             while (x + litLen < width && litLen < 255)
             {
-                if (x + litLen + 1 < width && row[x + litLen] == row[x + litLen + 1])
+                if (x + litLen + 1 < width &&
+                    BmpSaveGray(row, x + litLen) == BmpSaveGray(row, x + litLen + 1))
                     break;
                 litLen++;
             }
 
             if (litLen >= 3)
-                EmitAbsolute(out, row + x, litLen);
+            {
+                CKBYTE packet[258];
+                packet[0] = 0;
+                packet[1] = (CKBYTE)litLen;
+                for (CKDWORD i = 0; i < litLen; i++)
+                    packet[2 + i] = BmpSaveGray(row, x + i);
+                packet[2 + litLen] = 0;
+                if (!out.Append(packet, 2 + litLen + (litLen & 1)))
+                    return FALSE;
+            }
             else
                 for (CKDWORD i = 0; i < litLen; i++)
-                    EmitEncoded(out, 1, row[x + i]);
+                {
+                    const CKBYTE packet[] = {1, BmpSaveGray(row, x + i)};
+                    if (!out.Append(packet, sizeof(packet)))
+                        return FALSE;
+                }
             x += litLen;
         }
+        const CKBYTE eol[] = {0, 0};
+        if (!out.Append(eol, sizeof(eol)))
+            return FALSE;
     }
+    const CKBYTE eob[] = {0, 1};
+    return out.Append(eob, sizeof(eob));
 }
 
 //=============================================================================
@@ -889,52 +891,38 @@ int BMP_Read(void *data, int size, CKBitmapProperties *props)
 //=============================================================================
 int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
 {
-    if (!props)
+    if (!props || props->m_Format.Width <= 0 || props->m_Format.Height <= 0)
         return 0;
 
     CKDWORD width = props->m_Format.Width;
     CKDWORD height = props->m_Format.Height;
-    XArray<CKBYTE> converted;
-    CKDWORD srcStride = 0;
-    CKBYTE *srcPixels = ImageReader::GetSavePixels(props, converted, srcStride);
-
-    if (!srcPixels || width == 0 || height == 0)
-        return 0;
     if (bitDepth != 8 && bitDepth != 9 && bitDepth != 16 && bitDepth != 24 && bitDepth != 32)
         bitDepth = 24;
 
     CKBOOL useRle8 = (bitDepth == 9);
     CKDWORD headerBitDepth = useRle8 ? 8 : (CKDWORD)bitDepth;
-    CKDWORD dstStride = ((width * headerBitDepth + 31) / 32) * 4;
+    uint64_t dstStride = (((uint64_t)width * headerBitDepth + 31) / 32) * 4;
     CKDWORD paletteSize = (headerBitDepth == 8) ? 256 * 4 : 0;
     CKDWORD headerSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + paletteSize;
 
-    // Handle RLE encoding
-    XArray<CKBYTE> rleData;
-    CKDWORD pixelDataSize = 0;
+    uint64_t pixelDataSize = dstStride * height;
+    if (!useRle8 && pixelDataSize > (uint64_t)INT_MAX - headerSize)
+        return 0;
 
+    XArray<CKBYTE> converted;
+    CKDWORD srcStride = 0;
+    CKBYTE *srcPixels = ImageReader::GetSavePixels(props, converted, srcStride);
+    if (!srcPixels)
+        return 0;
     if (useRle8)
     {
-        XArray<CKBYTE> row((int)width);
-        row.Resize((int)width);
-
-        for (CKDWORD y = 0; y < height; y++)
-        {
-            CKBYTE *srcRow = srcPixels + (height - 1 - y) * srcStride;
-            for (CKDWORD x = 0; x < width; x++)
-                row.Begin()[x] = ImageReader::ToGray(srcRow[x * 4], srcRow[x * 4 + 1], srcRow[x * 4 + 2]);
-            RLE8::EncodeRow(row.Begin(), width, rleData);
-            RLE8::EmitEOL(rleData);
-        }
-        RLE8::EmitEOB(rleData);
-        pixelDataSize = (CKDWORD)rleData.Size();
-    }
-    else
-    {
-        pixelDataSize = dstStride * height;
+        ImageWriterBuffer count(NULL, INT_MAX - headerSize);
+        if (!BmpEncodeRle8(srcPixels, width, height, srcStride, count))
+            return 0;
+        pixelDataSize = count.Size();
     }
 
-    CKDWORD fileSize = headerSize + pixelDataSize;
+    int fileSize = (int)(headerSize + pixelDataSize);
     CKBYTE *buffer = new CKBYTE[fileSize]();
 
     // File header
@@ -952,7 +940,7 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
     ih->biPlanes = 1;
     ih->biBitCount = (CKWORD)headerBitDepth;
     ih->biCompression = useRle8 ? BI_RLE8 : BI_RGB;
-    ih->biSizeImage = pixelDataSize;
+    ih->biSizeImage = (CKDWORD)pixelDataSize;
     ih->biXPelsPerMeter = ih->biYPelsPerMeter = 2835;
     ih->biClrUsed = (headerBitDepth == 8) ? 256 : 0;
     ih->biClrImportant = 0;
@@ -972,14 +960,19 @@ int BMP_Save(void **outBuffer, CKBitmapProperties *props, int bitDepth)
     CKBYTE *dstData = buffer + headerSize;
     if (useRle8)
     {
-        memcpy(dstData, rleData.Begin(), pixelDataSize);
+        ImageWriterBuffer encoded(dstData, (size_t)pixelDataSize);
+        if (!BmpEncodeRle8(srcPixels, width, height, srcStride, encoded))
+        {
+            delete[] buffer;
+            return 0;
+        }
     }
     else
     {
         for (CKDWORD y = 0; y < height; y++)
         {
-            CKBYTE *srcRow = srcPixels + (height - 1 - y) * srcStride;
-            CKBYTE *dstRow = dstData + y * dstStride;
+            CKBYTE *srcRow = srcPixels + (size_t)(height - 1 - y) * srcStride;
+            CKBYTE *dstRow = dstData + (size_t)y * (size_t)dstStride;
 
             if (headerBitDepth == 8)
             {
