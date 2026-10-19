@@ -647,8 +647,7 @@ bool AviDemuxer::ParseStreamIndex(const RiffReader::Chunk &chunk, StreamEntry &s
     if (!m_Reader.Read(&hdr, sizeof(hdr)))
         return false;
 
-    // Field-indexed OpenDML is not implemented yet.
-    if (hdr.bIndexSubType == avi::kAVI_INDEX_2FIELD || hdr.wLongsPerEntry == 3)
+    if (hdr.bIndexSubType != 0 && hdr.bIndexSubType != avi::kAVI_INDEX_2FIELD)
         return false;
 
     if (!m_Reader.SeekTo(chunk.dataOffset))
@@ -679,6 +678,8 @@ bool AviDemuxer::ParseSuperIndex(const RiffReader::Chunk &chunk, StreamEntry &st
         return false;
 
     if (hdr.bIndexType != avi::kAVI_INDEX_OF_INDEXES)
+        return false;
+    if (hdr.bIndexSubType != 0 && hdr.bIndexSubType != avi::kAVI_INDEX_2FIELD)
         return false;
     if (hdr.wLongsPerEntry != 4)
         return false;
@@ -1141,7 +1142,8 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
 
     if (hdr.bIndexType != avi::kAVI_INDEX_OF_CHUNKS)
         return false;
-    if (hdr.wLongsPerEntry != 2)
+    const bool fields = hdr.bIndexSubType == avi::kAVI_INDEX_2FIELD;
+    if ((!fields && hdr.bIndexSubType != 0) || hdr.wLongsPerEntry != (fields ? 3 : 2))
         return false;
     if (expectedChunkId != 0 && hdr.dwChunkId != expectedChunkId)
         return false;
@@ -1153,7 +1155,8 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
         return true;
 
     size_t entryBytes = 0;
-    if (MulSizeOverflow(static_cast<size_t>(count), sizeof(avi::AviStdIndexEntry), entryBytes))
+    const size_t entrySize = fields ? 12u : sizeof(avi::AviStdIndexEntry);
+    if (MulSizeOverflow(static_cast<size_t>(count), entrySize, entryBytes))
         return false;
     if (entryBytes > (boundedChunkSize - 8u - sizeof(avi::AviStdIndexHeader)))
         return false;
@@ -1169,9 +1172,12 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
     const int64_t baseOffset = static_cast<int64_t>(hdr.qwBaseOffset);
     for (uint32_t i = 0; i < count; ++i)
     {
-        avi::AviStdIndexEntry e;
-        if (!m_Reader.Read(&e, sizeof(e)))
+        uint8_t entry[12];
+        if (!m_Reader.Read(entry, entrySize))
             return false;
+        avi::AviStdIndexEntry e;
+        e.dwOffset = avi::ReadLe32(entry);
+        e.dwSize = avi::ReadLe32(entry + 4);
 
         const uint32_t frameSize = e.dwSize & 0x7FFFFFFFu;
         if (frameSize > kMaxFramePayloadBytes)
@@ -1190,6 +1196,16 @@ bool AviDemuxer::ParseStandardIndex(int64_t offset, uint32_t chunkSize, uint32_t
             continue;
         if (frameEnd > m_Reader.FileSize())
             continue;
+
+        // Both offsets are relative to qwBaseOffset. dwSize covers the whole
+        // frame, not just field one; the decoder consumes both JPEG fields.
+        if (fields && avi::ReadLe32(entry + 8) != 0)
+        {
+            int64_t secondField = 0;
+            if (AddI64Overflow(baseOffset, avi::ReadLe32(entry + 8), secondField) ||
+                secondField <= fe.offset || secondField >= frameEnd)
+                continue;
+        }
 
         try
         {

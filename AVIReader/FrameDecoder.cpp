@@ -789,6 +789,98 @@ static int PrepareMjpegHuffman(const uint8_t *data, size_t size, uint8_t *prefix
     return -1;
 }
 
+static unsigned char *DecodeMjpegPicture(const uint8_t *data, size_t dataSize, int &imgW, int &imgH)
+{
+    uint8_t prefix[420];
+    size_t insertAt = 0;
+    const int extra = PrepareMjpegHuffman(data, dataSize, prefix, insertAt);
+    if (extra < 0)
+        return nullptr;
+    uint8_t *expanded = nullptr;
+    if (extra)
+    {
+        if (dataSize > size_t(std::numeric_limits<int>::max() - extra))
+            return nullptr;
+        expanded = new (std::nothrow) uint8_t[dataSize + extra];
+        if (!expanded)
+            return nullptr;
+        memcpy(expanded, data, insertAt);
+        memcpy(expanded + insertAt, prefix, extra);
+        memcpy(expanded + insertAt + extra, data + insertAt, dataSize - insertAt);
+        data = expanded;
+        dataSize += extra;
+    }
+
+    // stb_image decodes JPEG data to top-down RGB (3 channels).
+    int imgComp = 0;
+    unsigned char *pixels = stbi_load_from_memory(
+        data, static_cast<int>(dataSize), &imgW, &imgH, &imgComp, 3);
+    delete[] expanded;
+
+    return pixels;
+}
+
+// Walk JPEG markers rather than searching raw bytes: APP data may itself
+// contain SOI/EOI, and entropy data uses byte stuffing and restart markers.
+static bool FindMjpegPictureEnd(const uint8_t *data, size_t size, size_t &next, unsigned &polarity)
+{
+    if (size < 2 || data[0] != 255 || data[1] != 0xd8)
+        return false;
+    size_t p = 2;
+    uint32_t paddedSize = 0, pictureSize = 0;
+    bool scan = false;
+    polarity = 0;
+    while (p < size)
+    {
+        if (scan)
+            while (p < size && data[p] != 255)
+                ++p;
+        if (p == size || data[p++] != 255)
+            return false;
+        while (p < size && data[p] == 255)
+            ++p;
+        if (p == size)
+            return false;
+        const unsigned marker = data[p++];
+        if (scan && (marker == 0 || (marker >= 0xd0 && marker <= 0xd7)))
+            continue;
+        if (marker == 0xd9)
+        {
+            next = p;
+            // AVI1 lengths are advisory. Only use a bounded hint consistent
+            // with the actual EOI, otherwise fall back to marker scanning.
+            if (paddedSize >= p && paddedSize <= size && (!pictureSize || pictureSize == p))
+                next = paddedSize;
+            return true;
+        }
+        if (marker == 1)
+            continue;
+        if (marker == 0 || marker == 0xd8 || p + 2 > size)
+            return false;
+        const unsigned length = (unsigned(data[p]) << 8) | data[p + 1];
+        if (length < 2 || length > size - p)
+            return false;
+        if (marker == 0xe0 && length >= 7 && memcmp(data + p + 2, "AVI1", 4) == 0)
+        {
+            polarity = data[p + 6];
+            if (polarity > 2)
+                return false;
+            if (length >= 16)
+            {
+                paddedSize = pictureSize = 0;
+                for (unsigned i = 0; i < 4; ++i)
+                {
+                    paddedSize = (paddedSize << 8) | data[p + 8 + i];
+                    pictureSize = (pictureSize << 8) | data[p + 12 + i];
+                }
+            }
+        }
+        p += length;
+        scan = marker == 0xda;
+    }
+    return false;
+}
+
 bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                                int width, int height,
                                uint8_t *output, int outputStride)
@@ -800,59 +892,69 @@ bool MjpegFrameDecoder::Decode(const uint8_t *data, size_t dataSize,
     if (dataSize > static_cast<size_t>(std::numeric_limits<int>::max()))
         return false;
 
-    uint8_t prefix[420];
-    size_t insertAt = 0;
-    const int extra = PrepareMjpegHuffman(data, dataSize, prefix, insertAt);
-    if (extra < 0)
-        return false;
-    uint8_t *expanded = nullptr;
-    if (extra)
-    {
-        if (dataSize > size_t(std::numeric_limits<int>::max() - extra))
-            return false;
-        expanded = new (std::nothrow) uint8_t[dataSize + extra];
-        if (!expanded)
-            return false;
-        memcpy(expanded, data, insertAt);
-        memcpy(expanded + insertAt, prefix, extra);
-        memcpy(expanded + insertAt + extra, data + insertAt, dataSize - insertAt);
-        data = expanded;
-        dataSize += extra;
-    }
-
-    // stb_image decodes JPEG data to top-down RGB (3 channels).
-    int imgW = 0, imgH = 0, imgComp = 0;
-    unsigned char *pixels = stbi_load_from_memory(
-        data, static_cast<int>(dataSize), &imgW, &imgH, &imgComp, 3);
-    delete[] expanded;
-
+    int imgW = 0, imgH = 0;
+    unsigned char *pixels = DecodeMjpegPicture(data, dataSize, imgW, imgH);
     if (!pixels)
         return false;
 
-    // Dimension mismatch is an error -- the frame must match the header.
-    if (imgW != width || imgH != height)
+    unsigned char *second = nullptr;
+    int firstLine = 1; // AVI MJPG convention: the first field is bottom/odd.
+    const bool fields = imgH == height / 2 && height % 2 == 0;
+    if (imgW != width || (!fields && imgH != height))
     {
         stbi_image_free(pixels);
         return false;
+    }
+    if (fields)
+    {
+        size_t next = 0;
+        unsigned firstPolarity = 0;
+        if (!FindMjpegPictureEnd(data, dataSize, next, firstPolarity))
+        {
+            stbi_image_free(pixels);
+            return false;
+        }
+        while (next < dataSize && (data[next] == 0 || data[next] == 255))
+        {
+            if (data[next] == 255 && next + 1 < dataSize && data[next + 1] == 0xd8)
+                break;
+            ++next;
+        }
+        if (next < dataSize)
+        {
+            int secondW = 0, secondH = 0;
+            unsigned secondPolarity = 0;
+            size_t secondEnd = 0;
+            if (FindMjpegPictureEnd(data + next, dataSize - next, secondEnd, secondPolarity))
+                second = DecodeMjpegPicture(data + next, dataSize - next, secondW, secondH);
+            if (!second || secondW != imgW || secondH != imgH ||
+                (firstPolarity && firstPolarity == secondPolarity))
+            {
+                stbi_image_free(second);
+                stbi_image_free(pixels);
+                return false;
+            }
+            if (firstPolarity)
+                firstLine = firstPolarity == 1 ? 1 : 0;
+            else if (secondPolarity)
+                firstLine = secondPolarity == 1 ? 0 : 1;
+        }
+        // A captured single field supplies both output fields (OpenDML).
     }
 
-    // Convert top-down RGB -> bottom-up 32bpp ARGB.
-    size_t srcStride = 0;
-    if (MulSizeOverflow(static_cast<size_t>(imgW), 3u, srcStride))
-    {
-        stbi_image_free(pixels);
-        return false;
-    }
+    // Convert top-down JPEG rows to the engine's bottom-up BGRA frame.
+    const size_t srcStride = size_t(imgW) * 3;
     for (int y = 0; y < height; ++y)
     {
-        const int srcY = SourceRow(true, y, height);
-        const uint8_t *src = pixels + static_cast<size_t>(srcY) * srcStride;
-        uint8_t *dst = output + static_cast<size_t>(y) * static_cast<size_t>(outputStride);
-
+        const int topY = height - 1 - y;
+        const unsigned char *picture = second && (topY & 1) != firstLine ? second : pixels;
+        const int srcY = fields ? topY / 2 : topY;
+        const uint8_t *src = picture + size_t(srcY) * srcStride;
+        uint8_t *dst = output + size_t(y) * size_t(outputStride);
         for (int x = 0; x < width; ++x)
-                WriteBgra(dst, x, src[x * 3 + 2], src[x * 3 + 1], src[x * 3 + 0]);
+            WriteBgra(dst, x, src[x * 3 + 2], src[x * 3 + 1], src[x * 3]);
     }
-
+    stbi_image_free(second);
     stbi_image_free(pixels);
     return true;
 }

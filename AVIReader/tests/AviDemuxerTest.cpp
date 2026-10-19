@@ -401,7 +401,7 @@ TEST(AviDemuxerOpenDml, HeaderStandardIndxWithoutIdx1ParsesFrames)
     EXPECT_EQ(out[0], 0x22);
 }
 
-TEST(AviDemuxerOpenDml, HeaderFieldIndexIsRejected)
+TEST(AviDemuxerOpenDml, HeaderFieldIndexRetainsWholeFrame)
 {
     int w = 4, h = 4, bpp = 24;
     int srcStride = ((w * bpp + 31) & ~31) / 8;
@@ -411,7 +411,11 @@ TEST(AviDemuxerOpenDml, HeaderFieldIndexIsRejected)
     TempFile file(data, ".avi");
 
     AviDemuxer demuxer;
-    EXPECT_FALSE(demuxer.Open(file.CPath()));
+    ASSERT_TRUE(demuxer.Open(file.CPath()));
+    EXPECT_EQ(1, demuxer.GetFrameCount(0));
+    std::vector<uint8_t> out;
+    ASSERT_TRUE(demuxer.ReadFrameData(0, 0, out));
+    EXPECT_EQ(frame, out);
 }
 
 TEST(AviDemuxerVideoFormat, BiRgb32DefaultsToOpaqueAlphaMask)
