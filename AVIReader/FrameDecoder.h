@@ -148,17 +148,18 @@ private:
     uint32_t m_Palette[256];
 };
 
-/// Decodes packed YUV 4:2:2 streams (YUY2/UYVY) to 32bpp ARGB bottom-up.
+/// Decodes packed YUV 4:2:2 streams (YUY2/UYVY/YVYU) to 32bpp ARGB bottom-up.
 class PackedYuv422FrameDecoder : public IFrameDecoder
 {
 public:
-    PackedYuv422FrameDecoder(bool srcTopDown, bool uyvyLayout);
+    PackedYuv422FrameDecoder(bool srcTopDown, bool uyvyLayout, bool swapUv = false);
 
     FRAMEDECODER_DECODE_OVERRIDE;
 
 private:
     bool m_SrcTopDown;
     bool m_Uyvy;
+    bool m_SwapUv;
 };
 
 /// Decodes Microsoft Video 1 / CRAM frames to 32bpp ARGB bottom-up.

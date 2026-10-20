@@ -262,8 +262,9 @@ static std::unique_ptr<IFrameDecoder> CreateStoredFrameDecoder(const avi::AviStr
         return nullptr;
     }
 
-    if (info.codec == avi::kCodec_YUY2)
-        return std::make_unique<PackedYuv422FrameDecoder>(info.videoTopDown, false);
+    if (info.codec == avi::kCodec_YUY2 || info.codec == avi::MakeFourCC('Y', 'V', 'Y', 'U'))
+        return std::make_unique<PackedYuv422FrameDecoder>(info.videoTopDown, false,
+            info.codec == avi::MakeFourCC('Y', 'V', 'Y', 'U'));
     if (info.codec == avi::kCodec_UYVY)
         return std::make_unique<PackedYuv422FrameDecoder>(info.videoTopDown, true);
 
@@ -657,11 +658,11 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 }
 
 // ===========================================================================
-// PackedYuv422FrameDecoder  (YUY2 / UYVY)
+// PackedYuv422FrameDecoder  (YUY2 / UYVY / YVYU)
 // ===========================================================================
 
-PackedYuv422FrameDecoder::PackedYuv422FrameDecoder(bool srcTopDown, bool uyvyLayout)
-    : m_SrcTopDown(srcTopDown), m_Uyvy(uyvyLayout)
+PackedYuv422FrameDecoder::PackedYuv422FrameDecoder(bool srcTopDown, bool uyvyLayout, bool swapUv)
+    : m_SrcTopDown(srcTopDown), m_Uyvy(uyvyLayout), m_SwapUv(swapUv)
 {}
 
 bool PackedYuv422FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
@@ -708,6 +709,14 @@ bool PackedYuv422FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                 y0 = src[x * 2 + 1];
                 v  = src[x * 2 + 2];
                 y1 = src[x * 2 + 3];
+            }
+
+            if (m_SwapUv)
+            {
+                // YVYU: Y0 V Y1 U, with the same row order as YUY2.
+                const uint8_t temp = u;
+                u = v;
+                v = temp;
             }
 
             uint8_t b0, g0, r0;

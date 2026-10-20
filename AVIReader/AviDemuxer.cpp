@@ -495,7 +495,8 @@ bool AviDemuxer::ParseStreamList(const RiffReader::Chunk &strlChunk)
                 stream.info.bitsPerPixel = bih.biBitCount;
                 // BI_RGB is zero, even when the stream handler is "DIB ".
                 stream.info.codec = bih.biCompression;
-                if (bih.biCompression == avi::kCodec_YUY2 || bih.biCompression == avi::kCodec_UYVY)
+                if (bih.biCompression == avi::kCodec_YUY2 || bih.biCompression == avi::kCodec_UYVY ||
+                    bih.biCompression == avi::MakeFourCC('Y', 'V', 'Y', 'U'))
                     stream.info.videoTopDown = true;
             }
             else if (strh.fccType == avi::kStreamType_auds)
