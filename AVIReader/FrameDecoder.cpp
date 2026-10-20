@@ -1146,14 +1146,22 @@ bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
 {
     if (!ValidArgs(data, output, width, height, outputStride))
         return false;
-    if ((width % 4) != 0 || (height % 4) != 0)
+    // Indexed Video 1 decodes complete 4x4 blocks and leaves the top/right
+    // remainder at palette index zero. RGB555 still requires aligned dimensions.
+    if (m_SrcBpp != 8 && ((width % 4) != 0 || (height % 4) != 0))
         return false;
     if ((outputStride % 4) != 0 || outputStride < width * 4)
         return false;
 
+    const bool firstFrame = m_Width != width || m_Height != height || m_PreviousFrame.empty();
     const size_t frameBytes = BeginFrame(output, width, height, outputStride);
     if (frameBytes == 0)
         return false;
+
+    if (m_SrcBpp == 8 && firstFrame)
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x)
+                WriteArgb(output + static_cast<size_t>(y) * outputStride + x * 4, m_Palette[0]);
 
     // Delta/skipped blocks refer to previous frame contents.
 
