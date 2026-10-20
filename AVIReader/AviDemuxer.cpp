@@ -1,6 +1,7 @@
 #include "AviDemuxer.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <new>
@@ -553,7 +554,10 @@ bool AviDemuxer::ParseStreamList(const RiffReader::Chunk &strlChunk)
 
 bool AviDemuxer::ParseStreamHeader(const RiffReader::Chunk &chunk, avi::AviStreamHeader &strh)
 {
-    if (chunk.size < sizeof(avi::AviStreamHeader))
+    // VFW accepts the complete prefix through dwLength. Buffer/quality hints,
+    // sample size and rcFrame may be absent; decoded dimensions come from strf.
+    const size_t requiredSize = offsetof(avi::AviStreamHeader, dwLength) + sizeof(strh.dwLength);
+    if (chunk.size < requiredSize)
         return false;
     const size_t toRead = std::min(static_cast<size_t>(chunk.size),
                                    sizeof(avi::AviStreamHeader));
