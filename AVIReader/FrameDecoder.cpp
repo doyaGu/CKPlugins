@@ -177,6 +177,7 @@ public:
     ~AviVideoLayoutFrameDecoder() override { delete[] m_Pixels; delete m_Decoder; }
     void Reset() override { m_Decoder->Reset(); }
     bool NeedsSequentialFrames() const override { return m_Decoder->NeedsSequentialFrames(); }
+    bool IsLastFrameIndependent() const override { return m_Decoder->IsLastFrameIndependent(); }
     bool SetPalette(const uint32_t *colors) override { return m_Decoder->SetPalette(colors); }
     bool Decode(const uint8_t *data, size_t size, int width, int height, uint8_t *out, int stride) override
     {
@@ -405,6 +406,7 @@ void DeltaFrameDecoder::Reset()
     m_PreviousFrame.clear();
     m_Width = 0;
     m_Height = 0;
+    m_IndependentFrame = false;
 }
 
 size_t DeltaFrameDecoder::BeginFrame(uint8_t *output, int width, int height, int outputStride)
@@ -423,9 +425,10 @@ size_t DeltaFrameDecoder::BeginFrame(uint8_t *output, int width, int height, int
     return frameBytes;
 }
 
-void DeltaFrameDecoder::CommitFrame(const uint8_t *output, size_t frameBytes)
+void DeltaFrameDecoder::CommitFrame(const uint8_t *output, size_t frameBytes, bool independent)
 {
     memcpy(m_PreviousFrame.data(), output, frameBytes);
+    m_IndependentFrame = independent;
 }
 
 bool Rle8FrameDecoder::SetPalette(const uint32_t *colors)
@@ -465,6 +468,7 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
     int x = 0;
     int y = m_SrcTopDown ? (height - 1) : 0;
     const int yStep = m_SrcTopDown ? -1 : 1;
+    size_t writtenPixels = 0;
 
     const uint8_t *p = data;
     const uint8_t *end = data + dataSize;
@@ -485,6 +489,7 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                     return false;
                 ++x;
             }
+            writtenPixels += count;
             continue;
         }
 
@@ -525,6 +530,7 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                     return false;
                 ++x;
             }
+            writtenPixels += n;
             p += n;
             if (n & 1)
             {
@@ -535,7 +541,7 @@ bool Rle8FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
         }
     }
 
-    CommitFrame(output, frameBytes);
+    CommitFrame(output, frameBytes, writtenPixels == size_t(width) * height);
     return true;
 }
 
@@ -586,6 +592,7 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
     int x = 0;
     int y = m_SrcTopDown ? (height - 1) : 0;
     const int yStep = m_SrcTopDown ? -1 : 1;
+    size_t writtenPixels = 0;
 
     const uint8_t *p = data;
     const uint8_t *end = data + dataSize;
@@ -602,6 +609,7 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
         // does; encoders often round odd-width runs up to whole bytes.
         if (count > 0)
         {
+            const int firstX = x;
             for (int i = 0; i < count && x < width; ++i)
             {
                 const uint8_t index = (i & 1) ? LowNibble(value) : HighNibble(value);
@@ -609,6 +617,7 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                     return false;
                 ++x;
             }
+            writtenPixels += x - firstX;
             continue;
         }
 
@@ -641,6 +650,7 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
             const int paddedBytes = (dataBytes + 1) & ~1;
             if (end - p < paddedBytes)
                 return false;
+            const int firstX = x;
             for (int i = 0; i < n && x < width; ++i)
             {
                 const uint8_t packed = p[i >> 1];
@@ -649,11 +659,12 @@ bool Rle4FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                     return false;
                 ++x;
             }
+            writtenPixels += x - firstX;
             p += paddedBytes;
         }
     }
 
-    CommitFrame(output, frameBytes);
+    CommitFrame(output, frameBytes, writtenPixels == size_t(width) * height);
     return true;
 }
 
@@ -1181,6 +1192,7 @@ bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
     const int blocksHigh = height / 4;
     int totalBlocks = blocksWide * blocksHigh;
     int skipBlocks = 0;
+    bool independentFrame = true;
 
     uint32_t *dst = reinterpret_cast<uint32_t *>(output);
     const int stridePixels = outputStride / 4;
@@ -1218,6 +1230,8 @@ bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
                 skipBlocks = count - 1;
                 if (skipBlocks > totalBlocks)
                     return false;
+
+                independentFrame = false;
 
                 blockPtr += 4;
                 continue;
@@ -1331,6 +1345,6 @@ bool Msvideo1FrameDecoder::Decode(const uint8_t *data, size_t dataSize,
         }
     }
 
-    CommitFrame(output, frameBytes);
+    CommitFrame(output, frameBytes, independentFrame);
     return true;
 }

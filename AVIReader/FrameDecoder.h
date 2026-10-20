@@ -46,6 +46,9 @@ public:
     /// True if this decoder requires sequential decode order.
     virtual bool NeedsSequentialFrames() const { return false; }
 
+    /// After a successful Decode, true if that picture does not need prior pixels.
+    virtual bool IsLastFrameIndependent() const { return !NeedsSequentialFrames(); }
+
     /// Returns true when an indexed decoder's table changes and history needs replay.
     virtual bool SetPalette(const uint32_t *colors) { return false; }
 };
@@ -106,6 +109,7 @@ class DeltaFrameDecoder : public IFrameDecoder
 public:
     void Reset() override;
     bool NeedsSequentialFrames() const override { return true; }
+    bool IsLastFrameIndependent() const override { return m_IndependentFrame; }
 
 protected:
     /// Ensure m_PreviousFrame is sized for (width, height, outputStride), copy it
@@ -113,11 +117,12 @@ protected:
     size_t BeginFrame(uint8_t *output, int width, int height, int outputStride);
 
     /// Copy output back to m_PreviousFrame after a successful decode.
-    void CommitFrame(const uint8_t *output, size_t frameBytes);
+    void CommitFrame(const uint8_t *output, size_t frameBytes, bool independent);
 
     std::vector<uint8_t> m_PreviousFrame;
     int m_Width  = 0;
     int m_Height = 0;
+    bool m_IndependentFrame = false;
 };
 
 /// Decodes BI_RLE8 streams (8bpp indexed) to 32bpp ARGB bottom-up.

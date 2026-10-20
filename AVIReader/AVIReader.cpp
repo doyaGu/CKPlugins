@@ -183,10 +183,31 @@ bool AVIReader::DecodeFrameWithDependencies(int frameIndex)
         // When already decoded up to N, decoding N+1..target preserves correctness.
         startFrame = m_LastDecodedFrame + 1;
     }
-    else
+    bool restarted = false;
+    bool triedKeyframe = false;
+    int firstCandidate = startFrame;
+    for (int candidate = frameIndex; candidate >= firstCandidate; --candidate)
     {
-        // Strict seek correctness for delta codecs: do not trust index keyframe flags.
-        // Re-decode from frame 0 whenever seeking backwards or to unrelated positions.
+        const avi::FrameIndexEntry *frame = m_Demuxer.GetFrameInfo(m_VideoStream, candidate);
+        if (!frame->isKeyframe || !frame->size)
+            continue;
+
+        // A real keyframe can restart decoding beyond an unrelated bad delta.
+        // Validate the decoded coverage: some files mark dependent pictures as keys.
+        m_Decoder->Reset();
+        m_LastDecodedFrame = -1;
+        triedKeyframe = true;
+        // Reset discarded the cached reference; earlier real keys are eligible again.
+        firstCandidate = 0;
+        if (!DecodeFramePayload(candidate) || !m_Decoder->IsLastFrameIndependent())
+            continue;
+        m_LastDecodedFrame = candidate;
+        startFrame = candidate + 1;
+        restarted = true;
+        break;
+    }
+    if (!restarted && (triedKeyframe || startFrame == 0))
+    {
         m_Decoder->Reset();
         m_LastDecodedFrame = -1;
         startFrame = 0;
