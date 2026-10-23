@@ -20,7 +20,8 @@ struct AVIMovieProperties : public CKMovieProperties
 // ---------------------------------------------------------------------------
 // AVIReader -- dependency-free AVI movie reader.
 // Uses an internal RIFF/AVI demuxer (classic + OpenDML)
-// and frame decoder (BI_RGB / MJPEG) with no VFW dependency.
+// and bounded built-in decoders (DIB, RLE, Video1, MJPEG, packed YUV422).
+// The supported profile is documented in docs/alignment/Plugins/AVIReader/SUPPORT.md.
 // ---------------------------------------------------------------------------
 class AVIReader : public CKMovieReader
 {
