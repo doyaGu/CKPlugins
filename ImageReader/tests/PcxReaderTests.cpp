@@ -615,7 +615,7 @@ TEST(PcxReader, GetOptionsCount) {
 TEST(PcxReader, GetFlags) {
     PcxReader reader;
     CK_DATAREADER_FLAGS flags = reader.GetFlags();
-    ASSERT_EQ(15, flags);
+    ASSERT_EQ(CK_DATAREADER_FILELOAD | CK_DATAREADER_MEMORYLOAD, flags);
 }
 
 TEST(PcxReader, SaveFile_NotImplemented) {
