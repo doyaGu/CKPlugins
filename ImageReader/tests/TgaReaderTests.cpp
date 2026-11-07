@@ -116,7 +116,7 @@ static bool findTgaExpectedCrc(const std::string& subdir, const std::string& inp
 
 TEST(TgaReader, Uncompressed_BlackWhite_8bit) {
     std::string path = getTgaTestImagePath("testsuite", "ubw8.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -131,7 +131,7 @@ TEST(TgaReader, Uncompressed_BlackWhite_8bit) {
 
 TEST(TgaReader, Compressed_BlackWhite_8bit) {
     std::string path = getTgaTestImagePath("testsuite", "cbw8.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -144,7 +144,7 @@ TEST(TgaReader, Compressed_BlackWhite_8bit) {
 
 TEST(TgaReader, Uncompressed_ColorMap_8bit) {
     std::string path = getTgaTestImagePath("testsuite", "ucm8.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -153,7 +153,7 @@ TEST(TgaReader, Uncompressed_ColorMap_8bit) {
 
 TEST(TgaReader, Compressed_ColorMap_8bit) {
     std::string path = getTgaTestImagePath("testsuite", "ccm8.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -161,7 +161,7 @@ TEST(TgaReader, Compressed_ColorMap_8bit) {
 
 TEST(TgaReader, Uncompressed_TrueColor_16bit) {
     std::string path = getTgaTestImagePath("testsuite", "utc16.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -169,7 +169,7 @@ TEST(TgaReader, Uncompressed_TrueColor_16bit) {
 
 TEST(TgaReader, Uncompressed_TrueColor_24bit) {
     std::string path = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -182,7 +182,7 @@ TEST(TgaReader, Uncompressed_TrueColor_24bit) {
 
 TEST(TgaReader, Compressed_TrueColor_24bit) {
     std::string path = getTgaTestImagePath("testsuite", "ctc24.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -195,7 +195,7 @@ TEST(TgaReader, Compressed_TrueColor_24bit) {
 
 TEST(TgaReader, Uncompressed_TrueColor_32bit) {
     std::string path = getTgaTestImagePath("testsuite", "utc32.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -213,7 +213,7 @@ TEST(TgaReader, Uncompressed_TrueColor_32bit) {
 
 TEST(TgaReader, Origin_BottomLeft) {
     std::string path = getTgaTestImagePath("testsuite", "bottom_left.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -226,7 +226,7 @@ TEST(TgaReader, Origin_BottomLeft) {
 
 TEST(TgaReader, Origin_BottomRight) {
     std::string path = getTgaTestImagePath("testsuite", "bottom_right.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -239,7 +239,7 @@ TEST(TgaReader, Origin_BottomRight) {
 
 TEST(TgaReader, Origin_TopLeft) {
     std::string path = getTgaTestImagePath("testsuite", "top_left.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -252,7 +252,7 @@ TEST(TgaReader, Origin_TopLeft) {
 
 TEST(TgaReader, Origin_TopRight) {
     std::string path = getTgaTestImagePath("testsuite", "top_right.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -269,7 +269,7 @@ TEST(TgaReader, Origin_TopRight) {
 
 TEST(TgaReader, B5_WithAttrib) {
     std::string path = getTgaTestImagePath("testsuite", "b5-attrib.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -282,7 +282,7 @@ TEST(TgaReader, B5_WithAttrib) {
 
 TEST(TgaReader, B5_NoAttrib) {
     std::string path = getTgaTestImagePath("testsuite", "b5-noattrib.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -295,7 +295,7 @@ TEST(TgaReader, B5_NoAttrib) {
 
 TEST(TgaReader, B5_ColorMap) {
     std::string path = getTgaTestImagePath("testsuite", "b5-cmap.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -308,7 +308,7 @@ TEST(TgaReader, B5_ColorMap) {
 
 TEST(TgaReader, B5_UnusedColorMap) {
     std::string path = getTgaTestImagePath("testsuite", "b5-unused-cmap.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -325,7 +325,7 @@ TEST(TgaReader, B5_UnusedColorMap) {
 
 TEST(TgaReader, ColorMap_Offset) {
     std::string path = getTgaTestImagePath("testsuite", "cmap_offset.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -342,7 +342,7 @@ TEST(TgaReader, ColorMap_Offset) {
 
 TEST(TgaReader, Encoding_BlackWhite) {
     std::string path = getTgaTestImagePath("encoding", "black_white.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     TgaTestResult result = readTgaFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -354,7 +354,7 @@ TEST(TgaReader, Encoding_BlackWhite) {
 
 TEST(TgaReader, ReadMemory_TrueColor24) {
     std::string path = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     std::vector<uint8_t> data = readBinaryFile(path);
     ASSERT_TRUE(!data.empty());
@@ -370,7 +370,7 @@ TEST(TgaReader, ReadMemory_TrueColor24) {
 
 TEST(TgaReader, ReadMemory_TrueColor32) {
     std::string path = getTgaTestImagePath("testsuite", "utc32.tga");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     std::vector<uint8_t> data = readBinaryFile(path);
     ASSERT_TRUE(!data.empty());
@@ -386,7 +386,7 @@ TEST(TgaReader, ReadMemory_TrueColor32) {
 
 TEST(TgaReader, SaveLoad_24bit_NoRLE) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     // Read original
     TgaReader reader1;
@@ -427,7 +427,7 @@ TEST(TgaReader, SaveLoad_24bit_NoRLE) {
 
 TEST(TgaReader, SaveLoad_24bit_RLE) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     TgaReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -467,7 +467,7 @@ TEST(TgaReader, SaveLoad_24bit_RLE) {
 
 TEST(TgaReader, SaveLoad_32bit_NoRLE) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc32.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     TgaReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -507,7 +507,7 @@ TEST(TgaReader, SaveLoad_32bit_NoRLE) {
 
 TEST(TgaReader, SaveLoad_32bit_RLE) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc32.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     TgaReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -547,7 +547,7 @@ TEST(TgaReader, SaveLoad_32bit_RLE) {
 
 TEST(TgaReader, SaveLoad_16bit_Writes16BitTga) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     TgaReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -581,7 +581,7 @@ TEST(TgaReader, SaveLoad_16bit_Writes16BitTga) {
 
 TEST(TgaReader, SaveLoad_Greyscale_WritesGreyscaleTga) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     TgaReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -615,7 +615,7 @@ TEST(TgaReader, SaveLoad_Greyscale_WritesGreyscaleTga) {
 
 TEST(TgaReader, SaveLoad_16bit_RLE_Writes16BitTga) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     TgaReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -645,7 +645,7 @@ TEST(TgaReader, SaveLoad_16bit_RLE_Writes16BitTga) {
 
 TEST(TgaReader, SaveLoad_Greyscale_RLE_WritesGreyscaleTga) {
     std::string inputPath = getTgaTestImagePath("testsuite", "utc24.tga");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     TgaReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -1326,10 +1326,10 @@ TEST(TgaReader, ReaderReuse) {
 TEST(TgaReader, AllTgaTestsuite_MustDecode) {
     // Test all .tga files in testsuite subdirectory
     std::string tgaDir = joinPath(joinPath(g_TestImagesDir, "tga"), "testsuite");
-    if (!directoryExists(tgaDir)) SKIP_TEST("TGA testsuite directory not found");
+    if (!directoryExists(tgaDir)) FAIL_TEST("TGA testsuite directory not found");
     
     std::vector<std::string> tgaFiles = collectFilesWithExtension(tgaDir, ".tga");
-    if (tgaFiles.empty()) SKIP_TEST("No TGA files found in testsuite");
+    if (tgaFiles.empty()) FAIL_TEST("No TGA files found in testsuite");
     
     CorpusTestStats stats;
     std::vector<std::string> missingCrcs;
@@ -1384,10 +1384,10 @@ TEST(TgaReader, AllTgaTestsuite_MustDecode) {
 TEST(TgaReader, AllTgaEncoding_MustDecode) {
     // Test all .tga files in encoding subdirectory
     std::string tgaDir = joinPath(joinPath(g_TestImagesDir, "tga"), "encoding");
-    if (!directoryExists(tgaDir)) SKIP_TEST("TGA encoding directory not found");
+    if (!directoryExists(tgaDir)) FAIL_TEST("TGA encoding directory not found");
     
     std::vector<std::string> tgaFiles = collectFilesWithExtension(tgaDir, ".tga");
-    if (tgaFiles.empty()) SKIP_TEST("No TGA files found in encoding");
+    if (tgaFiles.empty()) FAIL_TEST("No TGA files found in encoding");
     
     CorpusTestStats stats;
     std::vector<std::string> missingCrcs;
@@ -1457,10 +1457,6 @@ TEST(TgaReader, AllTgaFixtures_MemoryConsistency) {
             std::string filepath = joinPath(tgaDir, filename);
             
             TgaTestResult fileResult = readTgaFile(filepath);
-            if (fileResult.errorCode != 0) {
-                stats.recordSkip();
-                continue;
-            }
             
             std::vector<uint8_t> fileData = readBinaryFile(filepath);
             if (fileData.empty()) {
@@ -1487,7 +1483,7 @@ TEST(TgaReader, AllTgaFixtures_MemoryConsistency) {
         }
     }
     
-    if (stats.total == 0) SKIP_TEST("No TGA fixtures found");
+    if (stats.total == 0) FAIL_TEST("No TGA fixtures found");
     
     printf("    %s\n", stats.summary().c_str());
     
@@ -1512,10 +1508,10 @@ TEST(TgaReader, RegressionCorpus_MustNotCrash) {
         // Try alternate path
         regDir = joinPath(g_TestImagesDir, "../regression/tga");
     }
-    if (!directoryExists(regDir)) SKIP_TEST("TGA regression directory not found");
+    if (!directoryExists(regDir)) FAIL_TEST("TGA regression directory not found");
     
     std::vector<std::string> tgaFiles = collectFilesWithExtension(regDir, ".tga");
-    if (tgaFiles.empty()) SKIP_TEST("No TGA regression files found");
+    if (tgaFiles.empty()) FAIL_TEST("No TGA regression files found");
     
     CorpusTestStats stats;
     int decodedOk = 0;
@@ -1560,10 +1556,10 @@ TEST(TgaReader, RegressionCorpus_MemoryMustNotCrash) {
     if (!directoryExists(regDir)) {
         regDir = joinPath(g_TestImagesDir, "../regression/tga");
     }
-    if (!directoryExists(regDir)) SKIP_TEST("TGA regression directory not found");
+    if (!directoryExists(regDir)) FAIL_TEST("TGA regression directory not found");
     
     std::vector<std::string> tgaFiles = collectFilesWithExtension(regDir, ".tga");
-    if (tgaFiles.empty()) SKIP_TEST("No TGA regression files found");
+    if (tgaFiles.empty()) FAIL_TEST("No TGA regression files found");
     
     CorpusTestStats stats;
     
@@ -1573,7 +1569,7 @@ TEST(TgaReader, RegressionCorpus_MemoryMustNotCrash) {
         
         std::vector<uint8_t> fileData = readBinaryFile(filepath);
         if (fileData.empty()) {
-            stats.recordSkip();
+            stats.recordFail(filename, "failed to read regression input");
             continue;
         }
         

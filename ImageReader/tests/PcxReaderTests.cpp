@@ -1228,32 +1228,18 @@ namespace {
 bool g_GeneratePcxFixtures = false;
 
 bool writePcxFixture(const std::string& name, const std::vector<uint8_t>& data) {
-    std::string pcxDir = joinPath(g_TestImagesDir, "pcx");
-    std::string path = joinPath(pcxDir, name);
-    return writeBinaryFile(path, data.data(), data.size());
+    const auto path = joinPath(g_TestOutputDir, name);
+    if (!writeBinaryFile(path, data.data(), data.size())) return false;
+    const auto file = readPcxFile(path);
+    const auto memory = readPcxMemory(data.data(), static_cast<int>(data.size()));
+    return file.errorCode == 0 && memory.errorCode == 0 && file.width == memory.width &&
+        file.height == memory.height && file.crc == memory.crc;
 }
 
 } // anonymous namespace
 
 TEST(PcxReader, GenerateFixtures) {
-    // This test generates PCX fixtures for corpus testing
-    // Skip unless explicitly enabled (e.g., via running with a filter)
-    std::string pcxDir = joinPath(g_TestImagesDir, "pcx");
-    if (!directoryExists(pcxDir)) {
-        // PCX directory doesn't exist, try to create it would require filesystem APIs
-        // For now, just skip and document that fixtures need to be generated
-        printf("    NOTE: PCX fixtures directory does not exist: %s\n", pcxDir.c_str());
-        printf("    Create the directory and re-run this test to generate fixtures.\n");
-        SKIP_TEST("PCX fixtures directory not found");
-    }
-    
-    // Check if fixtures already exist
-    std::vector<std::string> existing = collectFilesWithExtension(pcxDir, ".pcx");
-    if (!existing.empty()) {
-        printf("    NOTE: %zu PCX fixtures already exist, skipping generation\n", existing.size());
-        SKIP_TEST("Fixtures already exist");
-    }
-    
+    const auto &pcxDir = g_TestOutputDir;
     int generated = 0;
     
     // 8-bit paletted fixtures
@@ -1282,8 +1268,8 @@ TEST(PcxReader, GenerateFixtures) {
     if (writePcxFixture("1bit_32x32.pcx", generatePcx1bit(32, 32))) ++generated;
     if (writePcxFixture("1bit_100x100.pcx", generatePcx1bit(100, 100))) ++generated;
     
-    printf("    Generated %d PCX fixture files in %s\n", generated, pcxDir.c_str());
-    ASSERT_TRUE(generated > 0);
+    printf("    Generated %d PCX fixture files in %s\n", generated, pcxDir);
+    ASSERT_EQ(generated, 18);
 }
 
 //=============================================================================
@@ -1293,10 +1279,10 @@ TEST(PcxReader, GenerateFixtures) {
 
 TEST(PcxReader, AllPcxFixtures_MustDecode) {
     std::string pcxDir = joinPath(g_TestImagesDir, "pcx");
-    if (!directoryExists(pcxDir)) SKIP_TEST("PCX images directory not found");
+    if (!directoryExists(pcxDir)) FAIL_TEST("PCX images directory not found");
     
     std::vector<std::string> pcxFiles = collectFilesWithExtension(pcxDir, ".pcx");
-    if (pcxFiles.empty()) SKIP_TEST("No PCX files found in corpus");
+    if (pcxFiles.empty()) FAIL_TEST("No PCX files found in corpus");
     
     CorpusTestStats stats;
     std::vector<std::string> missingCrcs;
@@ -1351,10 +1337,10 @@ TEST(PcxReader, AllPcxFixtures_MustDecode) {
 
 TEST(PcxReader, AllPcxFixtures_MemoryConsistency) {
     std::string pcxDir = joinPath(g_TestImagesDir, "pcx");
-    if (!directoryExists(pcxDir)) SKIP_TEST("PCX images directory not found");
+    if (!directoryExists(pcxDir)) FAIL_TEST("PCX images directory not found");
     
     std::vector<std::string> pcxFiles = collectFilesWithExtension(pcxDir, ".pcx");
-    if (pcxFiles.empty()) SKIP_TEST("No PCX files found in corpus");
+    if (pcxFiles.empty()) FAIL_TEST("No PCX files found in corpus");
     
     CorpusTestStats stats;
     
@@ -1364,10 +1350,6 @@ TEST(PcxReader, AllPcxFixtures_MemoryConsistency) {
         
         // Read via file API
         PcxTestResult fileResult = readPcxFile(filepath);
-        if (fileResult.errorCode != 0) {
-            stats.recordSkip();
-            continue;
-        }
         
         // Read via memory API
         std::vector<uint8_t> fileData = readBinaryFile(filepath);
@@ -1394,7 +1376,7 @@ TEST(PcxReader, AllPcxFixtures_MemoryConsistency) {
         stats.recordPass();
     }
     
-    if (stats.total == 0) SKIP_TEST("No PCX fixtures could be tested");
+    if (stats.total == 0) FAIL_TEST("No PCX fixtures could be tested");
     
     printf("    %s\n", stats.summary().c_str());
     

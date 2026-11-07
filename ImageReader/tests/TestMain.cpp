@@ -88,7 +88,7 @@ namespace TestFramework {
 
 class TestRunner {
 public:
-    TestRunner() : passed_(0), failed_(0), skipped_(0) {}
+    TestRunner() : passed_(0), failed_(0) {}
 
     int run(const std::string& filter = "") {
         const std::vector<TestCase>& tests = TestRegistry::instance().tests();
@@ -163,10 +163,6 @@ public:
                     statusStr = "FAIL";
                     ++failed_;
                     break;
-                case TestStatus::Skipped:
-                    statusStr = "SKIP";
-                    ++skipped_;
-                    break;
             }
 
             printf("[%s] %s (%.1f ms)\n", statusStr, result.name.c_str(), result.durationMs);
@@ -180,7 +176,7 @@ public:
         // Summary
         printf("\n");
         printf("========================================\n");
-        printf("  Results: %d passed, %d failed, %d skipped\n", passed_, failed_, skipped_);
+        printf("  Results: %d passed, %d failed\n", passed_, failed_);
         printf("========================================\n");
 
         // List failures
@@ -199,7 +195,6 @@ public:
 private:
     int passed_;
     int failed_;
-    int skipped_;
 };
 
 } // namespace TestFramework

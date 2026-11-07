@@ -154,7 +154,7 @@ static bool findExpectedCrc(const std::string& inputName, uint32_t& outCrc) {
 
 TEST(BmpReader, Core_1_Bit) {
     std::string path = getBmpTestImagePath("Core_1_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -169,7 +169,7 @@ TEST(BmpReader, Core_1_Bit) {
 
 TEST(BmpReader, Core_4_Bit) {
     std::string path = getBmpTestImagePath("Core_4_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -182,7 +182,7 @@ TEST(BmpReader, Core_4_Bit) {
 
 TEST(BmpReader, Core_8_Bit) {
     std::string path = getBmpTestImagePath("Core_8_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -199,7 +199,7 @@ TEST(BmpReader, Core_8_Bit) {
 
 TEST(BmpReader, Info_1_Bit) {
     std::string path = getBmpTestImagePath("Info_1_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -212,7 +212,7 @@ TEST(BmpReader, Info_1_Bit) {
 
 TEST(BmpReader, Info_1_Bit_TopDown) {
     std::string path = getBmpTestImagePath("Info_1_Bit_Top_Down.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -225,7 +225,7 @@ TEST(BmpReader, Info_1_Bit_TopDown) {
 
 TEST(BmpReader, Info_4_Bit) {
     std::string path = getBmpTestImagePath("Info_4_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -238,7 +238,7 @@ TEST(BmpReader, Info_4_Bit) {
 
 TEST(BmpReader, Info_4_Bit_TopDown) {
     std::string path = getBmpTestImagePath("Info_4_Bit_Top_Down.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -251,7 +251,7 @@ TEST(BmpReader, Info_4_Bit_TopDown) {
 
 TEST(BmpReader, Info_8_Bit) {
     std::string path = getBmpTestImagePath("Info_8_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -264,7 +264,7 @@ TEST(BmpReader, Info_8_Bit) {
 
 TEST(BmpReader, Info_8_Bit_TopDown) {
     std::string path = getBmpTestImagePath("Info_8_Bit_Top_Down.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -281,7 +281,7 @@ TEST(BmpReader, Info_8_Bit_TopDown) {
 
 TEST(BmpReader, RGB16_X1R5G5B5) {
     std::string path = getBmpTestImagePath("Info_X1_R5_G5_B5.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -294,7 +294,7 @@ TEST(BmpReader, RGB16_X1R5G5B5) {
 
 TEST(BmpReader, RGB16_X1R5G5B5_TopDown) {
     std::string path = getBmpTestImagePath("Info_X1_R5_G5_B5_Top_Down.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -307,7 +307,7 @@ TEST(BmpReader, RGB16_X1R5G5B5_TopDown) {
 
 TEST(BmpReader, RGB16_Standard) {
     std::string path = getBmpTestImagePath("rgb16.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -320,7 +320,7 @@ TEST(BmpReader, RGB16_Standard) {
 
 TEST(BmpReader, RGB16_565) {
     std::string path = getBmpTestImagePath("rgb16-565.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -333,7 +333,7 @@ TEST(BmpReader, RGB16_565) {
 
 TEST(BmpReader, RGB16_231) {
     std::string path = getBmpTestImagePath("rgb16-231.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -346,7 +346,7 @@ TEST(BmpReader, RGB16_231) {
 
 TEST(BmpReader, RGBA16_1924) {
     std::string path = getBmpTestImagePath("rgba16-1924.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -363,7 +363,7 @@ TEST(BmpReader, RGBA16_1924) {
 
 TEST(BmpReader, RGB24) {
     std::string path = getBmpTestImagePath("rgb24.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -376,7 +376,7 @@ TEST(BmpReader, RGB24) {
 
 TEST(BmpReader, RGB24_ICC_Profile) {
     std::string path = getBmpTestImagePath("rgb24prof.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -385,7 +385,7 @@ TEST(BmpReader, RGB24_ICC_Profile) {
 
 TEST(BmpReader, Info_R8G8B8) {
     std::string path = getBmpTestImagePath("Info_R8_G8_B8.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -398,7 +398,7 @@ TEST(BmpReader, Info_R8G8B8) {
 
 TEST(BmpReader, Info_R8G8B8_TopDown) {
     std::string path = getBmpTestImagePath("Info_R8_G8_B8_Top_Down.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -415,7 +415,7 @@ TEST(BmpReader, Info_R8G8B8_TopDown) {
 
 TEST(BmpReader, RGB32) {
     std::string path = getBmpTestImagePath("rgb32.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -428,14 +428,14 @@ TEST(BmpReader, RGB32) {
 
 TEST(BmpReader, RGB32_Bitfields) {
     std::string path = getBmpTestImagePath("rgb32bf.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     // rgb32bf.bmp uses BI_BITFIELDS compression which may not be supported
     // If it loads (errorCode 0), check CRC; otherwise accept unsupported
     if (result.errorCode != 0) {
         // Format not supported by this reader - this is acceptable
-        SKIP_TEST("BI_BITFIELDS format not supported");
+        FAIL_TEST("BI_BITFIELDS format not supported");
     }
 
     uint32_t expectedCrc;
@@ -446,12 +446,12 @@ TEST(BmpReader, RGB32_Bitfields) {
 
 TEST(BmpReader, RGB32_111110) {
     std::string path = getBmpTestImagePath("rgb32-111110.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     // rgb32-111110.bmp uses unusual bitfield masks which may not be supported
     if (result.errorCode != 0) {
-        SKIP_TEST("RGB32-111110 format not supported");
+        FAIL_TEST("RGB32-111110 format not supported");
     }
 
     uint32_t expectedCrc;
@@ -462,7 +462,7 @@ TEST(BmpReader, RGB32_111110) {
 
 TEST(BmpReader, RGBA32) {
     std::string path = getBmpTestImagePath("rgba32.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -475,7 +475,7 @@ TEST(BmpReader, RGBA32) {
 
 TEST(BmpReader, RGBA32_61754) {
     std::string path = getBmpTestImagePath("rgba32-61754.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -488,7 +488,7 @@ TEST(BmpReader, RGBA32_61754) {
 
 TEST(BmpReader, Info_A8R8G8B8) {
     std::string path = getBmpTestImagePath("Info_A8_R8_G8_B8.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -501,7 +501,7 @@ TEST(BmpReader, Info_A8R8G8B8) {
 
 TEST(BmpReader, Info_A8R8G8B8_TopDown) {
     std::string path = getBmpTestImagePath("Info_A8_R8_G8_B8_Top_Down.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -518,7 +518,7 @@ TEST(BmpReader, Info_A8R8G8B8_TopDown) {
 
 TEST(BmpReader, V3_A1R5G5B5) {
     std::string path = getBmpTestImagePath("V3_A1_R5_G5_B5.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -531,7 +531,7 @@ TEST(BmpReader, V3_A1R5G5B5) {
 
 TEST(BmpReader, V3_A1R5G5B5_TopDown) {
     std::string path = getBmpTestImagePath("V3_A1_R5_G5_B5_Top_Down.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -544,7 +544,7 @@ TEST(BmpReader, V3_A1R5G5B5_TopDown) {
 
 TEST(BmpReader, V3_A4R4G4B4) {
     std::string path = getBmpTestImagePath("V3_A4_R4_G4_B4.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -557,7 +557,7 @@ TEST(BmpReader, V3_A4R4G4B4) {
 
 TEST(BmpReader, V3_R5G6B5) {
     std::string path = getBmpTestImagePath("V3_R5_G6_B5.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -570,7 +570,7 @@ TEST(BmpReader, V3_R5G6B5) {
 
 TEST(BmpReader, V3_X4R4G4B4) {
     std::string path = getBmpTestImagePath("V3_X4_R4_G4_B4.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -583,7 +583,7 @@ TEST(BmpReader, V3_X4R4G4B4) {
 
 TEST(BmpReader, V3_X8R8G8B8) {
     std::string path = getBmpTestImagePath("V3_X8_R8_G8_B8.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -600,7 +600,7 @@ TEST(BmpReader, V3_X8R8G8B8) {
 
 TEST(BmpReader, V4_24Bit) {
     std::string path = getBmpTestImagePath("V4_24_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -613,7 +613,7 @@ TEST(BmpReader, V4_24Bit) {
 
 TEST(BmpReader, V5_24Bit) {
     std::string path = getBmpTestImagePath("V5_24_Bit.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -626,7 +626,7 @@ TEST(BmpReader, V5_24Bit) {
 
 TEST(BmpReader, Pal8_V4) {
     std::string path = getBmpTestImagePath("pal8v4.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -639,7 +639,7 @@ TEST(BmpReader, Pal8_V4) {
 
 TEST(BmpReader, Pal8_V5) {
     std::string path = getBmpTestImagePath("pal8v5.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -656,7 +656,7 @@ TEST(BmpReader, Pal8_V5) {
 
 TEST(BmpReader, Pal8_RLE) {
     std::string path = getBmpTestImagePath("pal8rle.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -669,7 +669,7 @@ TEST(BmpReader, Pal8_RLE) {
 
 TEST(BmpReader, Pal4_RLE) {
     std::string path = getBmpTestImagePath("pal4rle.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -683,7 +683,7 @@ TEST(BmpReader, Pal4_RLE) {
 TEST(BmpReader, Pal4_RLE_Cut) {
     // RLE with early termination
     std::string path = getBmpTestImagePath("pal4rlecut.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -696,7 +696,7 @@ TEST(BmpReader, Pal4_RLE_Cut) {
 
 TEST(BmpReader, Pal4_RLE_Transparency) {
     std::string path = getBmpTestImagePath("pal4rletrns.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -773,7 +773,7 @@ TEST(BmpReader, Pal2Color) {
 TEST(BmpReader, Pal8_BadIndex) {
     // Palette index out of bounds - should still load but output is undefined
     std::string path = getBmpTestImagePath("pal8badindex.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(0, result.errorCode);
@@ -785,7 +785,7 @@ TEST(BmpReader, Pal8_BadIndex) {
 
 TEST(BmpReader, ImageMagick_InvalidRunLength) {
     std::string path = getBmpTestImagePath("imagemagick_invalid_run_length_issue_2321.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     // This may or may not load depending on implementation
@@ -799,7 +799,7 @@ TEST(BmpReader, ImageMagick_InvalidRunLength) {
 
 TEST(BmpReader, ReadMemory_RGB24) {
     std::string path = getBmpTestImagePath("rgb24.bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     std::vector<uint8_t> data = readBinaryFile(path);
     ASSERT_TRUE(!data.empty());
@@ -819,7 +819,7 @@ TEST(BmpReader, ReadMemory_RGB24) {
 
 TEST(BmpReader, Bad_BadBitCount) {
     std::string path = getBmpTestImagePath("Bad_badbitcount.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_NE(0, result.errorCode);
@@ -827,7 +827,7 @@ TEST(BmpReader, Bad_BadBitCount) {
 
 TEST(BmpReader, Bad_BadPlanes) {
     std::string path = getBmpTestImagePath("Bad_badplanes.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_NE(0, result.errorCode);
@@ -835,7 +835,7 @@ TEST(BmpReader, Bad_BadPlanes) {
 
 TEST(BmpReader, Bad_ClrsUsed) {
     std::string path = getBmpTestImagePath("Bad_clrsUsed.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_NE(0, result.errorCode);
@@ -843,7 +843,7 @@ TEST(BmpReader, Bad_ClrsUsed) {
 
 TEST(BmpReader, Bad_Height) {
     std::string path = getBmpTestImagePath("Bad_height.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_NE(0, result.errorCode);
@@ -851,7 +851,7 @@ TEST(BmpReader, Bad_Height) {
 
 TEST(BmpReader, Bad_Width) {
     std::string path = getBmpTestImagePath("Bad_width.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_NE(0, result.errorCode);
@@ -859,7 +859,7 @@ TEST(BmpReader, Bad_Width) {
 
 TEST(BmpReader, Bad_OversizePalette) {
     std::string path = getBmpTestImagePath("Bad_pal8oversizepal.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_NE(0, result.errorCode);
@@ -867,7 +867,7 @@ TEST(BmpReader, Bad_OversizePalette) {
 
 TEST(BmpReader, Bad_ReallyBig) {
     std::string path = getBmpTestImagePath("Bad_reallybig.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_NE(0, result.errorCode);
@@ -875,7 +875,7 @@ TEST(BmpReader, Bad_ReallyBig) {
 
 TEST(BmpReader, Bad_RleTopDown) {
     std::string path = getBmpTestImagePath("Bad_rletopdown.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     // RLE with top-down orientation is non-standard but this reader handles it gracefully
@@ -886,7 +886,7 @@ TEST(BmpReader, Bad_RleTopDown) {
 
 TEST(BmpReader, Bad_ShortFile) {
     std::string path = getBmpTestImagePath("Bad_shortfile.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     // Short/truncated files may be partially loaded or rejected
@@ -896,7 +896,7 @@ TEST(BmpReader, Bad_ShortFile) {
 
 TEST(BmpReader, Bad_UnusualExtendBufferUsage) {
     std::string path = getBmpTestImagePath("Bad_unusual_extend_buffer_usage.bad_bmp");
-    if (!fileExists(path)) SKIP_TEST("Test image not found");
+    if (!fileExists(path)) FAIL_TEST("Test image not found");
 
     BmpTestResult result = readBmpFile(path);
     ASSERT_EQ(CKBITMAPERROR_FILECORRUPTED, result.errorCode);
@@ -908,7 +908,7 @@ TEST(BmpReader, Bad_UnusualExtendBufferUsage) {
 
 TEST(BmpReader, SaveLoad_RGB24_Roundtrip) {
     std::string inputPath = getBmpTestImagePath("rgb24.bmp");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     // Read original
     BmpReader reader1;
@@ -948,7 +948,7 @@ TEST(BmpReader, SaveLoad_RGB24_Roundtrip) {
 
 TEST(BmpReader, SaveLoad_RGBA32_Roundtrip) {
     std::string inputPath = getBmpTestImagePath("rgba32.bmp");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     BmpReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -990,7 +990,7 @@ TEST(BmpReader, SaveLoad_RGBA32_Roundtrip) {
 
 TEST(BmpReader, SaveLoad_RGB16_Writes16BitBmp) {
     std::string inputPath = getBmpTestImagePath("rgb24.bmp");
-    if (!fileExists(inputPath)) SKIP_TEST("Test image not found");
+    if (!fileExists(inputPath)) FAIL_TEST("Test image not found");
 
     BmpReader reader1;
     CKBitmapProperties* props1 = nullptr;
@@ -1675,7 +1675,7 @@ TEST(BmpReader, ReaderReuse) {
 //=============================================================================
 
 // Files known to use unsupported BMP features (2-bit palette, etc.)
-// These are skipped rather than counted as failures
+// These must be rejected and leave no decoded image.
 static bool isKnownUnsupportedBmp(const std::string& filename) {
     // 2-bit paletted BMPs are not commonly supported
     if (filename == "pal2.bmp" || filename == "pal2color.bmp") return true;
@@ -1686,14 +1686,13 @@ TEST(BmpReader, AllBmpFixtures_MustDecode) {
     // Test all .bmp files in the corpus - they must decode without error
     // and match their reference CRC if one exists
     std::string bmpDir = joinPath(joinPath(g_TestImagesDir, "bmp"), "images");
-    if (!directoryExists(bmpDir)) SKIP_TEST("BMP images directory not found");
+    if (!directoryExists(bmpDir)) FAIL_TEST("BMP images directory not found");
     
     std::vector<std::string> bmpFiles = collectFilesWithExtension(bmpDir, ".bmp");
-    if (bmpFiles.empty()) SKIP_TEST("No BMP files found in corpus");
+    if (bmpFiles.empty()) FAIL_TEST("No BMP files found in corpus");
     
     CorpusTestStats stats;
     std::vector<std::string> missingCrcs;
-    std::vector<std::string> skippedUnsupported;
     
     for (size_t i = 0; i < bmpFiles.size(); ++i) {
         const std::string& filename = bmpFiles[i];
@@ -1704,8 +1703,13 @@ TEST(BmpReader, AllBmpFixtures_MustDecode) {
         if (result.errorCode != 0) {
             // Check if this is a known unsupported format
             if (isKnownUnsupportedBmp(filename)) {
-                skippedUnsupported.push_back(filename);
-                stats.recordSkip();
+                BmpReader reader;
+                CKBitmapProperties *properties = nullptr;
+                ASSERT_TRUE(reader.ReadFile(const_cast<char *>(filepath.c_str()), &properties) != 0);
+                ASSERT_TRUE(properties != nullptr);
+                ASSERT_TRUE(properties->m_Format.Image == nullptr);
+                ASSERT_TRUE(properties->m_Data == nullptr);
+                stats.recordPass();
                 continue;
             }
             stats.recordFail(filename, "decode failed with error " + std::to_string(result.errorCode));
@@ -1735,11 +1739,6 @@ TEST(BmpReader, AllBmpFixtures_MustDecode) {
         stats.recordPass();
     }
     
-    // Report skipped unsupported formats
-    if (!skippedUnsupported.empty()) {
-        printf("    NOTE: %zu files skipped (unsupported format)\n", skippedUnsupported.size());
-    }
-    
     // Report missing CRCs (informational, not failure)
     if (!missingCrcs.empty()) {
         printf("    NOTE: %zu files have no reference CRC\n", missingCrcs.size());
@@ -1760,10 +1759,10 @@ TEST(BmpReader, AllBmpFixtures_MustDecode) {
 TEST(BmpReader, AllBmpFixtures_MemoryConsistency) {
     // Verify file reading and memory reading produce identical results
     std::string bmpDir = joinPath(joinPath(g_TestImagesDir, "bmp"), "images");
-    if (!directoryExists(bmpDir)) SKIP_TEST("BMP images directory not found");
+    if (!directoryExists(bmpDir)) FAIL_TEST("BMP images directory not found");
     
     std::vector<std::string> bmpFiles = collectFilesWithExtension(bmpDir, ".bmp");
-    if (bmpFiles.empty()) SKIP_TEST("No BMP files found in corpus");
+    if (bmpFiles.empty()) FAIL_TEST("No BMP files found in corpus");
     
     CorpusTestStats stats;
     
@@ -1773,10 +1772,6 @@ TEST(BmpReader, AllBmpFixtures_MemoryConsistency) {
         
         // Read via file
         BmpTestResult fileResult = readBmpFile(filepath);
-        if (fileResult.errorCode != 0) {
-            stats.recordSkip(); // Skip files that don't decode
-            continue;
-        }
         
         // Read file into memory, then read via memory API
         std::vector<uint8_t> fileData = readBinaryFile(filepath);
@@ -1816,7 +1811,7 @@ TEST(BmpReader, AllBmpFixtures_MemoryConsistency) {
 TEST(BmpReader, BadBmpFixtures_MustNotCrash) {
     // Test all .bad_bmp files - they should fail gracefully without crashing
     std::string bmpDir = joinPath(joinPath(g_TestImagesDir, "bmp"), "images");
-    if (!directoryExists(bmpDir)) SKIP_TEST("BMP images directory not found");
+    if (!directoryExists(bmpDir)) FAIL_TEST("BMP images directory not found");
     
     std::vector<std::string> entries = listDirectory(bmpDir);
     std::vector<std::string> badFiles;
@@ -1826,7 +1821,7 @@ TEST(BmpReader, BadBmpFixtures_MustNotCrash) {
         }
     }
     
-    if (badFiles.empty()) SKIP_TEST("No .bad_bmp files found");
+    if (badFiles.empty()) FAIL_TEST("No .bad_bmp files found");
     
     CorpusTestStats stats;
     

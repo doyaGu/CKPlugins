@@ -130,8 +130,7 @@ public:
 
 enum class TestStatus {
     Passed,
-    Failed,
-    Skipped
+    Failed
 };
 
 struct TestResult {
@@ -140,7 +139,7 @@ struct TestResult {
     std::string message;
     double durationMs;
 
-    TestResult() : status(TestStatus::Skipped), durationMs(0) {}
+    TestResult() : status(TestStatus::Failed), durationMs(0) {}
 };
 
 //=============================================================================
@@ -225,14 +224,6 @@ inline void failTest(const std::string& msg) {
     }
 }
 
-inline void skipTest(const std::string& msg) {
-    TestRegistry& reg = TestRegistry::instance();
-    if (reg.currentResult && !reg.currentFailed) {
-        reg.currentResult->status = TestStatus::Skipped;
-        reg.currentResult->message = msg;
-    }
-}
-
 #define ASSERT_TRUE(cond) \
     do { \
         if (!(cond)) { \
@@ -298,9 +289,9 @@ inline void skipTest(const std::string& msg) {
         } \
     } while(0)
 
-#define SKIP_TEST(msg) \
+#define FAIL_TEST(msg) \
     do { \
-        TestFramework::skipTest(msg); \
+        TestFramework::failTest(msg); \
         return; \
     } while(0)
 
@@ -523,24 +514,21 @@ struct CorpusTestStats {
     int total;
     int passed;
     int failed;
-    int skipped;
     std::vector<std::string> failures;
     
-    CorpusTestStats() : total(0), passed(0), failed(0), skipped(0) {}
+    CorpusTestStats() : total(0), passed(0), failed(0) {}
     
     void recordPass() { ++total; ++passed; }
     void recordFail(const std::string& filename, const std::string& reason) {
         ++total; ++failed;
         failures.push_back(filename + ": " + reason);
     }
-    void recordSkip() { ++total; ++skipped; }
     
-    bool allPassed() const { return failed == 0; }
+    bool allPassed() const { return total > 0 && failed == 0 && passed == total; }
     
     std::string summary() const {
         std::ostringstream oss;
         oss << "Corpus: " << passed << "/" << total << " passed";
-        if (skipped > 0) oss << ", " << skipped << " skipped";
         if (failed > 0) oss << ", " << failed << " FAILED";
         return oss.str();
     }
