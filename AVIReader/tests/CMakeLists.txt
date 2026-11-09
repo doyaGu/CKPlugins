@@ -60,7 +60,13 @@ function(avireader_add_test TEST_NAME)
     if (MSVC)
         target_compile_definitions(${TEST_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
     endif ()
-    gtest_discover_tests(${TEST_NAME})
+    # Discover after the parallel build has finished, allowing slower VM startup.
+    # CMake 3.16/3.17 retain post-build discovery with the same startup allowance.
+    if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18
+            AND NOT DEFINED CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE)
+        set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
+    endif ()
+    gtest_discover_tests(${TEST_NAME} DISCOVERY_TIMEOUT 30)
 endfunction()
 
 # =============================================================================
