@@ -14,6 +14,7 @@ ckplugins_add_plugin(AVIReader
         stb
 )
 
-if (CKPLUGINS_BUILD_TESTS)
+ckplugins_tests_enabled(AVIReader _module_tests_enabled)
+if (_module_tests_enabled)
     add_subdirectory(tests)
 endif ()

@@ -15,7 +15,8 @@ ckplugins_add_plugin(ImageReader
 # =============================================================================
 # Testing
 # =============================================================================
-if ((CKPLUGINS_BUILD_TESTS OR BUILD_TESTS) AND BUILD_TESTING)
+ckplugins_tests_enabled(ImageReader _module_tests_enabled)
+if (_module_tests_enabled)
     add_executable(ImageReaderTests
             tests/TestFramework.h
             tests/TestMain.cpp

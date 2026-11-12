@@ -52,6 +52,13 @@ option(CKPLUGINS_BUILD_SHARED "Build shared libraries for plugins" ON)
 option(CKPLUGINS_BUILD_STATIC "Build static libraries for plugins" OFF)
 option(CKPLUGINS_BUILD_TESTS "Build unit tests" ${CKPLUGINS_IS_TOP_LEVEL})
 option(CKPLUGINS_INSTALL "Generate install target" ${CKPLUGINS_IS_TOP_LEVEL})
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CKPluginsTests.cmake")
+set(_ckplugins_test_modules AVIReader ImageReader WavReader VirtoolsLoader)
+foreach (_test_module IN LISTS CKPLUGINS_TEST_MODULES)
+    if (NOT _test_module IN_LIST _ckplugins_test_modules)
+        message(FATAL_ERROR "Unknown CKPLUGINS_TEST_MODULES entry: ${_test_module}")
+    endif ()
+endforeach ()
 
 # =============================================================================
 # CMake modules
