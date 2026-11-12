@@ -1,6 +1,6 @@
 # CKPlugins
 
-CKPlugins provides the file and media plugins used by the Virtools-compatible Ballanced runtime.
+CKPlugins provides file readers and media decoders for the Virtools runtime.
 
 ## Plugins
 
@@ -11,17 +11,17 @@ CKPlugins provides the file and media plugins used by the Virtools-compatible Ba
 
 ## Support scope
 
-The instructions in this document describe CKPlugins' `sdl` branch. That branch is continuously built through [Ballanced](https://github.com/doyaGu/Ballanced) on Windows, Linux, and macOS. The Ballanced root presets define the supported full-runtime matrix.
+The instructions in this document describe CKPlugins' `sdl` branch. [NeMo2](https://github.com/doyaGu/NeMo2) builds and tests the plugins on Windows, Linux, and macOS. Its root presets define the engine platform matrix.
 
 Standalone builds use this repository's generic CMake flow. Output names are platform-native: `.dll` on Windows, `.so` on Linux, and `.dylib` on macOS.
 
 ## Building
 
-### Recommended: Ballanced superproject
+### NeMo2 engine
 
 ```bash
-git clone --recurse-submodules https://github.com/doyaGu/Ballanced.git
-cd Ballanced
+git clone --recurse-submodules https://github.com/doyaGu/NeMo2.git
+cd NeMo2
 cmake --preset linux-x64-runtime # choose the preset for your host
 cmake --build --preset linux-x64-runtime-stage-release
 ```
@@ -46,7 +46,7 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-When building from a Ballanced source checkout, sibling CK2 and VxMath projects are detected automatically and the SDK-fetch option is unnecessary.
+When building from a NeMo2 source checkout, sibling CK2 and VxMath projects are detected automatically and the SDK-fetch option is unnecessary.
 
 ### CMake options
 
@@ -64,7 +64,7 @@ The current standalone suite covers AVIReader and ImageReader. WavReader and Vir
 
 ## Versioning
 
-CKPlugins is versioned independently. Ballanced releases pin an exact plugin commit.
+CKPlugins is versioned independently. NeMo2 pins its commit.
 
 ## License
 
